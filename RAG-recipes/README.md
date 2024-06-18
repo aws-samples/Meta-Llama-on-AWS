@@ -16,7 +16,7 @@ This CloudFormation template launches a Sagemaker Notebook Instance and an RDS f
 
 1. Click on one of the links above to deploy the solution via CloudFormation in your AWS account. 
 
-2. Click the **Upload** a template file bottom and then upload the [deployment.yaml](cloudformation/text2sql.yml). Click the orange **Next** button located in the bottom right corner of the console to configure the deployment.
+2. Click the **Upload** a template file bottom and then upload the [deployment.yaml](cloudformation/text2sql.yaml). Click the orange **Next** button located in the bottom right corner of the console to configure the deployment.
 
 3. Set the stack name as `text2sql` and click **Next** to continue.
 
