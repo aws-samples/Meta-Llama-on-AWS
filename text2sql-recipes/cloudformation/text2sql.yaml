@@ -124,7 +124,7 @@ Resources:
     Properties:
       GitConfig:
         RepositoryUrl: https://github.com/aws-samples/Meta-Llama-on-AWS.git
-        Branch: text2sql-blog
+        Branch: main
   
 
   SageMakerNotebook:
