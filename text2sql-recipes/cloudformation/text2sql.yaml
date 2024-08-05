@@ -1,10 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Deploy resources required to run the text2sql llama3 notebook. 
 
-
 Resources:
 
-  # VPC for all resources
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -13,6 +11,46 @@ Resources:
       EnableDnsSupport: true
       InstanceTenancy: default
 
+  VPCLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      RetentionInDays: 7
+
+  VPCLogRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: vpc-flow-logs.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !GetAtt LogsPolicy.PolicyArn
+
+  LogsPolicy:
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      Path: /
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Resource: '*'
+
+  VPCFlowLog:
+    Type: "AWS::EC2::FlowLog"
+    Properties:
+      ResourceId: !Ref VPC
+      ResourceType: VPC
+      TrafficType: ALL
+      LogGroupName: !Ref VPCLogGroup
+      DeliverLogsPermissionArn: !GetAtt [ VPCLogRole, Arn ]
   
   SageMakerSubnet:
     Type: AWS::EC2::Subnet
@@ -43,38 +81,39 @@ Resources:
         - 1
         - !GetAZs ''
 
+
   SageMakerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Allow outbound MySQL
       VpcId: !Ref VPC
-      SecurityGroupIngress: []
       SecurityGroupEgress:
         - IpProtocol: tcp
           FromPort: 3306
           ToPort: 3306
-          CidrIp: 0.0.0.0/0
+          DestinationSecurityGroupId: !Ref RDSSecurityGroup
       Tags:
         - Key: Name
           Value: AllowOutboundMySQL
-
 
   RDSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       VpcId: !Ref VPC
       GroupDescription: 'Database instances security group'
-      SecurityGroupIngress:
-        - 
-          CidrIp: 0.0.0.0/0
-          FromPort: 3306
-          ToPort: 3306
-          IpProtocol: tcp
-        - 
-          CidrIp: 0.0.0.0/0
-          FromPort: 80  
-          ToPort: 80 
-          IpProtocol: tcp
+      Tags:
+        - Key: Name
+          Value: RDSSecurityGroup
+
+  RDSSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref RDSSecurityGroup
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !Ref SageMakerSecurityGroup
+
 
   RDSSubnetGroup:
     Type: 'AWS::RDS::DBSubnetGroup'
@@ -94,11 +133,11 @@ Resources:
       MasterUsername: !Join ['', ['{{resolve:secretsmanager:', !Ref RDSSecret, ':SecretString:username}}' ]]
       MasterUserPassword: !Join ['', ['{{resolve:secretsmanager:', !Ref RDSSecret, ':SecretString:password}}' ]]
       DBSubnetGroupName: !Ref RDSSubnetGroup
+      StorageEncrypted: true
       VPCSecurityGroups: 
         - !Ref RDSSecurityGroup
   
-
-  SageMakerRole:
+  SageMakerNotebookInstanceRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -108,34 +147,63 @@ Resources:
             Principal:
               Service: sagemaker.amazonaws.com
             Action: 'sts:AssumeRole'
-          - Effect: Allow
-            Principal:
-              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
-            Action: 'sts:AssumeRole'
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonBedrockFullAccess
-        - arn:aws:iam::aws:policy/AmazonRDSFullAccess
-        - arn:aws:iam::aws:policy/AWSCloudFormationReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
-        - arn:aws:iam::aws:policy/SecretsManagerReadWrite 
+      Policies:
+      - PolicyName: SecretsManagerAccessPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: 'secretsmanager:GetSecretValue'
+              Resource: !Ref RDSSecret
+      - PolicyName: BedrockAccessPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: 'bedrock:InvokeModel'
+              Resource:
+                - 'arn:aws:bedrock:*::foundation-model/meta.llama3-70b-instruct-v1:0'
+                - 'arn:aws:bedrock:*::foundation-model/meta.llama3-8b-instruct-v1:0'
+                - 'arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v2:0'
+      - PolicyName: CloudFormationReadOnlyAccessPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - 'cloudformation:DescribeStackResources'
+                - 'cloudformation:DescribeStacks'
+              Resource: !Join
+                - ''
+                - - 'arn:aws:cloudformation:'
+                  - !Ref 'AWS::Region'
+                  - ':'
+                  - !Ref 'AWS::AccountId'
+                  - ':stack/'
+                  - !Ref 'AWS::StackName'
+                  - '/*'
+      
+
+  SageMakerNotebook:
+    Type: AWS::SageMaker::NotebookInstance
+    Properties:
+      InstanceType: ml.t3.medium
+      RoleArn: !GetAtt SageMakerNotebookInstanceRole.Arn
+      SubnetId: !Ref SageMakerSubnet 
+      InstanceMetadataServiceConfiguration:
+        MinimumInstanceMetadataServiceVersion: 2
+      SecurityGroupIds:
+        - !Ref SageMakerSecurityGroup
+      DefaultCodeRepository: !GetAtt CodeRepository.CodeRepositoryName    
 
   CodeRepository:
     Type: AWS::SageMaker::CodeRepository
     Properties:
       GitConfig:
         RepositoryUrl: https://github.com/aws-samples/Meta-Llama-on-AWS.git
-        Branch: main
-  
-
-  SageMakerNotebook:
-    Type: AWS::SageMaker::NotebookInstance
-    Properties:
-      InstanceType: ml.t3.medium
-      RoleArn: !GetAtt SageMakerRole.Arn
-      SubnetId: !Ref SageMakerSubnet
-      SecurityGroupIds:
-        - !Ref SageMakerSecurityGroup
-      DefaultCodeRepository: !GetAtt CodeRepository.CodeRepositoryName    
+        Branch: text2sql-blog
 
   RDSSecret: 
     Type: AWS::SecretsManager::Secret
