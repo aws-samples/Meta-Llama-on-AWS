@@ -1,0 +1,102 @@
+[
+    {
+      "Airplane_id": 1,
+      "Producer": "Boeing",
+      "Type": "737"
+    },
+    {
+      "Airplane_id": 2,
+      "Producer": "Airbus",
+      "Type": "A320"
+    },
+    {
+      "Airplane_id": 3,
+      "Producer": "Embraer",
+      "Type": "E195"
+    },
+    {
+      "Airplane_id": 4,
+      "Producer": "Bombardier",
+      "Type": "CRJ900"
+    },
+    {
+      "Airplane_id": 5,
+      "Producer": "Boeing",
+      "Type": "777"
+    },
+    {
+      "Airplane_id": 6,
+      "Producer": "Airbus",
+      "Type": "A330"
+    },
+    {
+      "Airplane_id": 7,
+      "Producer": "Embraer",
+      "Type": "E175"
+    },
+    {
+      "Airplane_id": 8,
+      "Producer": "Bombardier",
+      "Type": "Q400"
+    },
+    {
+      "Airplane_id": 9,
+      "Producer": "Boeing",
+      "Type": "787"
+    },
+    {
+      "Airplane_id": 10,
+      "Producer": "Airbus",
+      "Type": "A350"
+    },
+    {
+      "Airplane_id": 11,
+      "Producer": "Embraer",
+      "Type": "E190"
+    },
+    {
+      "Airplane_id": 12,
+      "Producer": "Bombardier",
+      "Type": "CRJ700"
+    },
+    {
+      "Airplane_id": 13,
+      "Producer": "Boeing",
+      "Type": "757"
+    },
+    {
+      "Airplane_id": 14,
+      "Producer": "Airbus",
+      "Type": "A380"
+    },
+    {
+      "Airplane_id": 15,
+      "Producer": "Embraer",
+      "Type": "E170"
+    },
+    {
+      "Airplane_id": 16,
+      "Producer": "Bombardier",
+      "Type": "CRJ200"
+    },
+    {
+      "Airplane_id": 17,
+      "Producer": "Boeing",
+      "Type": "747"
+    },
+    {
+      "Airplane_id": 18,
+      "Producer": "Airbus",
+      "Type": "A321"
+    },
+    {
+      "Airplane_id": 19,
+      "Producer": "Embraer",
+      "Type": "E145"
+    },
+    {
+      "Airplane_id": 20,
+      "Producer": "Bombardier",
+      "Type": "CRJ1000"
+    }
+  ]
