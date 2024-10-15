@@ -1,0 +1,41 @@
+database: 
+
+table_schemas:
+    -  |
+        CREATE TABLE equipment_db.airplanes -- Table name
+        (
+        Airplane_id INT(10), -- airplane id
+        Producer VARCHAR(20), -- name of the producer
+        Type VARCHAR(10), -- airplane type
+        PRIMARY KEY (Airplane_id)
+        )
+    -   |
+        CREATE TABLE transport_db.flights -- Table name
+        (
+        Flight_number VARCHAR(10), -- flight id
+        Arrival_time VARCHAR(20), -- arrival time (YYYY-MM-DDTH:M:S)
+        Arrival_date VARCHAR(20), -- arrival date (YYYY-MM-DD)
+        Departure_time VARCHAR(20), -- departure time (YYYY-MM-DDTH:M:S)
+        Departure_date VARCHAR(20), -- departure date (YYYY-MM-DD)
+        Destination VARCHAR(20), -- destination
+        Airplane_id INT(10), -- airplane id
+        PRIMARY KEY (Flight_number),
+        FOREIGN KEY (Airplane_id) REFERENCES equipment_db.airplanes(Airplane_id)
+        )
+
+questions: |
+    1. What are the different airplane producers represented in the database?
+    2. How many flights are scheduled to arrive at a particular destination on a given date?
+    3. What is the latest arrival time for flights on a particular day?
+    4. Which airplane types are used for flights to a specific destination?
+    5. What is the average departure time for flights using a particular airplane type?
+    6. List all the flights that will depart before a certain time on a given date, sorted by departure time.
+    7. Find the airplane IDs and producers for airplanes that have flown to a particular destination.
+    8. How many different airplane types are used by each producer?
+    9. Get the flight numbers and arrival/departure times for flights using a specific airplane ID.
+    10. Calculate the duration of each flight based on the departure and arrival times.
+    11. Find the most frequently used airplane type for flights to a particular destination.
+    12. List all the flights that will arrive or depart between two given dates/times.
+    13. Get the flight numbers and airplane producers for flights with a departure time within a certain range.
+    14. Count the number of flights per destination, grouped by airplane type.
+    15. Retrieve the flight details for flights using airplanes produced by a specific manufacturer.
