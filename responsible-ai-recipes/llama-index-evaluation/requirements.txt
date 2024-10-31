@@ -1,0 +1,10 @@
+boto3
+chromadb==0.5.3
+llama-index
+llama-index-core
+llama-index-embeddings-bedrock
+llama-index-llms-bedrock
+llama-index-llms-bedrock-converse
+llama-index-readers-file
+llama-index-vector-stores-chroma
+pydantic==2.7.0
