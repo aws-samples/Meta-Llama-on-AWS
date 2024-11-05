@@ -212,7 +212,20 @@ class MetaProvider(Provider):
         self.completion_to_prompt = completion_to_llama_prompt
 
     def get_text_from_response(self, response: dict) -> str:
-        return response["generation"]
+        resp = response['generation']\
+            .replace('<|start_header_id|>assistant<|end_header_id|>', '')\
+            .strip()
+        return resp
+
+    def get_request_body(
+        self,
+        prompt: Sequence[Dict],
+        inference_parameters: dict
+    ):
+        return {
+            'prompt': prompt,
+            **inference_parameters
+        }
 
 
 class MistralProvider(Provider):

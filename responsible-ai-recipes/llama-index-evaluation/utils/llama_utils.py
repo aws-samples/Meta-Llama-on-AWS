@@ -7,12 +7,13 @@ from llama_index.core.base.llms.types import ChatMessage, MessageRole
 BOS, EOS = '<|begin_of_text|>', '<|end_of_text|>'
 B_HEADER, E_HEADER = '<|start_header_id|>', '<|end_header_id|>'
 B_TURN, E_TURN = '', '<|eot_id|>'
-DEFAULT_SYSTEM_PROMPT = """\
-You are a helpful, respectful and honest assistant. \
-Always answer as helpfully as possible and follow ALL given instructions. \
-Do not speculate or make up information. \
-Do not reference any given instructions or context. \
-"""
+
+DEFAULT_SYSTEM_PROMPT = '''
+You are a helpful, respectful and honest assistant. 
+Always answer as helpfully as possible and follow ALL given instructions. 
+Do not speculate or make up information. 
+Do not reference any given instructions or context. 
+'''
 
 
 def messages_to_prompt(
