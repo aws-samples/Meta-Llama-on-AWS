@@ -1,0 +1,5 @@
+nltk
+datasets
+torch
+transformers
+scikit-learn
