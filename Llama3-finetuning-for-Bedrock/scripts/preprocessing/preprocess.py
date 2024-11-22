@@ -5,7 +5,7 @@ from sklearn.model_selection import train_test_split
 import json
 import logging
 
-system_message = """You are Llama, an AI assistant created to be helpful and honest. Your knowledge spans a wide range of topics, allowing you to engage in substantive conversations and provide analysis on complex subjects."""
+system_message = """You are a knowledgeable AI assistant that provides clear, accurate, and concise answers to multiple questions on various topics, addressing each query separately and in order."""
 
 def convert_format(data):
     messages = [{"content": system_message, "role": "system"}]

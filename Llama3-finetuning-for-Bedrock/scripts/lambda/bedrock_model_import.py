@@ -27,7 +27,6 @@ def lambda_handler(event, context):
     REGION_NAME = 'us-west-2'
     bedrock = boto3.client(service_name='bedrock',
                        region_name=REGION_NAME)
-
     # Generate a unique job name with timestamp and random number
     timestamp = int(time.time())
     random_number = random.randint(1000, 9999)
@@ -58,62 +57,13 @@ def lambda_handler(event, context):
         job_arn = create_job_response.get("jobArn")
         print(f"Job created with ARN: {job_arn}")
         
-        # Calculate end time (context.get_remaining_time_in_millis() - 10 seconds buffer)
-        end_time = time.time() + (context.get_remaining_time_in_millis() / 1000) - 10
-        
-        # Wait for the job to complete or fail
-        while time.time() < end_time:
-            status, model_arn, error_message = check_job_status(bedrock, JOB_NAME)
-            print(f"Current status: {status}")
-            
-            if status == 'Completed':
-                return {
-                    'statusCode': 200,
-                    'body': json.dumps('Model import job completed successfully'),
-                    'model_arn': model_arn,
-                    'job_name': JOB_NAME
-                }
-            elif status == 'Failed':
-                return {
-                    'statusCode': 500,
-                    'body': json.dumps(f'Model import job failed: {error_message}'),
-                    'job_name': JOB_NAME,
-                    'error': error_message
-                }
-            elif status == 'Stopped':
-                return {
-                    'statusCode': 500,
-                    'body': json.dumps('Model import job was stopped'),
-                    'job_name': JOB_NAME
-                }
-            
-            # Wait before next check
-            time.sleep(30)
-        
-        # If we're about to timeout, return job information for follow-up
         return {
-            'statusCode': 202,  # Accepted
-            'body': json.dumps('Job still in progress - Lambda timeout approaching'),
+            'statusCode': 200,
             'job_name': JOB_NAME,
-            'job_arn': job_arn,
-            'requires_follow_up': True
+            'job_arn': job_arn
         }
     
     except ClientError as e:
         error_message = str(e)
         print(f"An error occurred: {error_message}")
-        return {
-            'statusCode': 500,
-            'body': json.dumps(f'Error: {error_message}'),
-            'job_name': JOB_NAME,
-            'error': error_message
-        }
-    except Exception as e:
-        error_message = str(e)
-        print(f"Unexpected error: {error_message}")
-        return {
-            'statusCode': 500,
-            'body': json.dumps(f'Unexpected error: {error_message}'),
-            'job_name': JOB_NAME,
-            'error': error_message
-        }
+        raise e
