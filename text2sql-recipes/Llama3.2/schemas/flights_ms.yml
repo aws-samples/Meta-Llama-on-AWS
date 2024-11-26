@@ -1,0 +1,29 @@
+database: transport_db
+
+table_name: flights
+
+table_schema: |
+    CREATE TABLE transport_db.flights -- Table name
+    (
+    Flight_number VARCHAR(10), -- flight id
+    Arrival_time VARCHAR(20), -- arrival time (YYYY-MM-DDTH:M:S)
+    Arrival_date VARCHAR(20), -- arrival date (YYYY-MM-DD)
+    Departure_time VARCHAR(20), -- departure time (YYYY-MM-DDTH:M:S)
+    Departure_date VARCHAR(20), -- departure date (YYYY-MM-DD)
+    Destination VARCHAR(20), -- destination
+    Airplane_id INT(10), -- airplane id
+    PRIMARY KEY (Flight_number),
+    FOREIGN KEY (Airplane_id) REFERENCES equipment_db.airplanes(Airplane_id)
+    )
+
+questions: |
+    1. What are the flight numbers of all flights arriving at a specific destination?
+    2. What is the average arrival time for flights on a particular date?
+    3. List the flight numbers and arrival times for flights departing between a given range of dates and times.
+    4. How many flights are scheduled to depart from a specific airport on a given date?
+    5. What is the longest duration between departure and arrival times for any flight?
+    6. List the flight numbers and airplane IDs for flights with a departure delay greater than X hours.
+    7. Find the most frequently used airplane for flights to a particular destination.
+    8. Get the total number of flights scheduled for each destination, grouped by arrival date.
+    9. Retrieve the flight details (flight number, departure/arrival times, airplane ID) for flights using a specific airplane on a given date range.
+    10. List the flight numbers and destinations for flights with a scheduled arrival time between two specified times on a given date.
