@@ -1,17 +1,207 @@
-import boto3
+# Standard library imports
+import os
 import json
 import time
-import os
-import subprocess
 import shutil
-from botocore.exceptions import ClientError
 import random
-import pandas as pd
 from typing import List, Dict
 from datetime import datetime
+from io import BytesIO
+
+# Third-party library imports
+import boto3
+import pandas as pd
+from botocore.exceptions import ClientError
+from PIL import Image
 from IPython.display import display, clear_output, HTML
 
+# SageMaker-specific imports
+from sagemaker.s3 import S3Downloader, S3Uploader
 
+# System-level imports
+import subprocess
+
+# Encoding/decoding
+import base64
+
+def fetch_image_bytes(image_path_or_url):
+    """Fetch and process image bytes."""
+    try:
+        # Open and process the image
+        with Image.open(image_path_or_url) as image:
+            # Convert to RGB if necessary
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            # Create a new BytesIO object
+            buffered = BytesIO()
+            # Save the image to the buffer
+            image.save(buffered, format='JPEG', quality=95)
+            # Get the byte value
+            img_byte_value = buffered.getvalue()
+            buffered.close()
+            return img_byte_value
+            
+    except Exception as e:
+        print(f"Error in fetch_image_bytes: {str(e)}")
+        return None
+
+def encode_image_to_base64(image_path_or_url):
+    """Encode image to base64 string."""
+    try:
+        # Verify file exists
+        if not os.path.exists(image_path_or_url):
+            raise FileNotFoundError(f"Image file not found: {image_path_or_url}")
+            
+        # Get image bytes
+        img_bytes = fetch_image_bytes(image_path_or_url)
+        if img_bytes is None:
+            raise ValueError("Failed to fetch image bytes")
+            
+        # Encode to base64
+        base64_encoded = base64.b64encode(img_bytes).decode('utf-8')
+        return base64_encoded
+        
+    except Exception as e:
+        print(f"Error in encode_image_to_base64: {str(e)}")
+        return None
+    
+
+# Test the image processing
+def test_image_processing(image_path):
+    """Test function to verify image processing"""
+    print(f"Testing image processing for: {image_path}")
+    print(f"File exists: {os.path.exists(image_path)}")
+    
+    try:
+        # Try to open and verify the image
+        with Image.open(image_path) as img:
+            print(f"Image mode: {img.mode}")
+            print(f"Image size: {img.size}")
+        
+        # Try encoding
+        encoded = encode_image_to_base64(image_path)
+        if encoded:
+            print("✓ Image encoded successfully")
+            print(f"Encoded length: {len(encoded)}")
+            return encoded
+        else:
+            print("✗ Image encoding failed")
+            return None
+            
+    except Exception as e:
+        print(f"Error during test: {str(e)}")
+        return None
+
+def remove_field_from_json(file_path, field_to_remove):
+    try:
+        # Read the JSON file
+        with open(file_path, 'r') as file:
+            data = json.load(file)
+        
+        # Remove the field if it exists
+        if field_to_remove in data:
+            del data[field_to_remove]
+            print(f"Field '{field_to_remove}' removed successfully")
+        else:
+            print(f"Field '{field_to_remove}' not found in the file")
+        
+        # Write the modified data back to the file
+        with open(file_path, 'w') as file:
+            json.dump(data, file, indent=2)
+            print(f"File saved successfully: {file_path}")
+            
+    except FileNotFoundError:
+        print(f"Error: File not found at {file_path}")
+    except json.JSONDecodeError:
+        print("Error: Invalid JSON format in the file")
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+
+def download_artifacts(training_job_name, model_uri, local_dir='tmp_artifacts'):
+    """
+    Download training artifacts locally using SageMaker utilities
+    
+    Args:
+        training_job_name (str): Name of the SageMaker training job
+        model_uri (str): S3 URI of the model artifacts
+        local_dir (str): Local directory to store artifacts temporarily
+    Returns:
+        str: Path to the extracted files
+    """
+    try:
+        extract_path = os.path.join(local_dir, 'extracted')
+        os.makedirs(extract_path, exist_ok=True)
+        
+        print(f"Downloading artifacts from {model_uri}")
+        S3Downloader.download(
+            s3_uri=model_uri,
+            local_path=extract_path,
+            sagemaker_session=None
+        )
+        
+        print(f"Files downloaded to: {extract_path}")
+        return extract_path
+        
+    except Exception as e:
+        print(f"An error occurred during download: {str(e)}")
+        raise
+
+def upload_artifacts(local_dir, sagemaker_session, training_job_name, prefix='model-artifacts'):
+    """
+    Upload local files to S3 bucket using SageMaker utilities and default bucket
+    
+    Args:
+        local_dir (str): Local directory containing the files to upload
+        sagemaker_session: SageMaker session object
+        training_job_name (str): Name of the training job
+        prefix (str): Prefix for the S3 path
+    Returns:
+        str: The S3 URI where artifacts were uploaded
+    """
+    try:
+        # Get the default bucket
+        default_bucket = sagemaker_session.default_bucket()
+        
+        # Create a timestamp for uniqueness
+        timestamp = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+        
+        # Construct the S3 URI with prefix and timestamp
+        s3_uri = f"s3://{default_bucket}/{prefix}/{training_job_name}/{timestamp}"
+        
+        print(f"Uploading artifacts to: {s3_uri}")
+        S3Uploader.upload(
+            local_path=local_dir,
+            desired_s3_uri=s3_uri,
+            sagemaker_session=sagemaker_session
+        )
+        
+        print(f"Upload completed to {s3_uri}")
+        return s3_uri
+                
+    except Exception as e:
+        print(f"An error occurred during upload: {str(e)}")
+        raise
+
+def cleanup_local_files(local_dir):
+    """
+    Clean up local temporary files
+    
+    Args:
+        local_dir (str): Local directory to clean up
+    """
+    try:
+        if os.path.exists(local_dir):
+            for root, dirs, files in os.walk(local_dir, topdown=False):
+                for name in files:
+                    os.remove(os.path.join(root, name))
+                for name in dirs:
+                    os.rmdir(os.path.join(root, name))
+            os.rmdir(local_dir)
+            print(f"Cleaned up directory: {local_dir}")
+    except Exception as e:
+        print(f"An error occurred during cleanup: {str(e)}")
+        raise
 
 def create_boto3_layer(lambda_client):
     """Create a Lambda layer with the latest boto3 version"""
