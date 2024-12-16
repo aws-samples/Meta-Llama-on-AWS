@@ -1,21 +1,28 @@
-import boto3
+# Standard library imports
+import os
 import json
 import time
-import os
-import subprocess
 import shutil
-from botocore.exceptions import ClientError
 import random
-import pandas as pd
 from typing import List, Dict
 from datetime import datetime
-from IPython.display import display, clear_output, HTML
-from sagemaker.s3 import S3Downloader, S3Uploader
-from datetime import datetime
-import base64
-import os
-from PIL import Image
 from io import BytesIO
+
+# Third-party library imports
+import boto3
+import pandas as pd
+from botocore.exceptions import ClientError
+from PIL import Image
+from IPython.display import display, clear_output, HTML
+
+# SageMaker-specific imports
+from sagemaker.s3 import S3Downloader, S3Uploader
+
+# System-level imports
+import subprocess
+
+# Encoding/decoding
+import base64
 
 def fetch_image_bytes(image_path_or_url):
     """Fetch and process image bytes."""
