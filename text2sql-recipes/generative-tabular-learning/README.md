@@ -81,3 +81,10 @@ QNA_SYS_PROMPT = format_instructions(instructions)
 
 ### Reference
 - [Generative Tabular Learning(GTL)](https://arxiv.org/pdf/2310.07338)
+
+### Steps to use the generative tabular learning notebook
+- **Step 1:** Download the "justetf.txt" file from this repo and upload to an Amazon S3 bucket in your account.
+- **Step 2:** In your AWS Account console under Amazon Athena, create a table using the DDL provided in "etf-table-ddl.sql" file. (**NOTE:** Please replace the S3 bucket name and S3 bucket folder name with the bucket and folder location where you uploaded the file in step1.)
+- **Step 3:** Run the jupyter notebook "llama3-text2sql-gtl.ipynb" from an Amazon SageMaker notebook instance in your AWS account. (**NOTE:** Please ensure you have access to Meta's Llama models in Amazon Bedrock within your AWS account and region from where you are running the jupyter notebook).
+- 
+- [Generative Tabular Learning(GTL)](https://arxiv.org/pdf/2310.07338)

@@ -136,6 +136,6 @@ STORED AS INPUTFORMAT
   'org.apache.hadoop.mapred.TextInputFormat' 
 OUTPUTFORMAT 
   'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
-LOCATION 's3://aws-bucket-us-east-1/etfTable/'
+LOCATION 's3://aws-bucket-us-east-1-YOURBUCKET/YOURBUCKETFOLDER/'
 TBLPROPERTIES ('skip.header.line.count'='1')
 ;
