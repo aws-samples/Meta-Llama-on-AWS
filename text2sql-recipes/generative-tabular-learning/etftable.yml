@@ -1,0 +1,135 @@
+table_name: etftable
+
+table_schema: |
+  CREATE TABLE etftable -- Table name
+  (
+  `isin` string, -- International Securities Identification Number
+  `wkn` string, -- Wertpapierkennnummer or German securities identification number
+  `name` string, -- ETF Name
+  `fundprovider` string, -- Financial Company providing the ETF
+  `legalstructure` string, -- Exchange Traded Fund (ETF) or Exchange Traded Notes (ETN)
+  `quote` float,
+  `quote52low` float,
+  `quote52high` float,
+  `ytdreturncur` float, -- Year-to-date return percentage of the fund
+  `totalexpenseratio` float,  -- An expense ratio is the cost of owning an ETF or ETN, paid annually and measured as a percent of your investment in the fund
+  `fiveyearvolatilitycur` float,
+  `fiveyearreturnperriskcur` float,
+  `yearvolatilitycur` float,
+  `distributionpolicy` string,
+  `fundcurrency` string, -- Currency in which the fund is traded (US Dollar - USD, EUR - Euro)
+  `yeardividendyield` float,
+  `threemonthreturncur` float,
+  `monthreturncur` float,
+  `sixmonthreturncur` float,
+  `inceptiondate` string,
+  `threeyearvolatilitycur` float,
+  `yearreturnperriskcur` float,
+  `yearreturn2cur` float,
+  `yearreturn4cur` float,
+  `replicationmethod` string,
+  `hassecuritieslending` string,
+  `ticker` string, -- Stock market Ticker Symbol
+  `yearreturncur` float,
+  `threeyearreturnperriskcur` float,
+  `domicilecountry` string, -- Country where ETF or ETN is created
+  `threeyearreturncur` float,
+  `valornumber` string,
+  `currentdividendyield` float,
+  `yearreturn3cur` float,
+  `fiveyearreturncur` float, -- five year returns as a percentage of total value
+  `weekreturncur` float,
+  `yearreturn1cur` float,
+  `quotemarket` string,
+  `quotedate` string, -- date in string format
+  `labels` array<string>, -- Labels associated with ETF or ETN
+  `replicationstrategy` string,
+  `fundstructure` string,
+  `distributionfrequency` string,
+  `currencyrisk` string,
+  `fiscalyearend` string,
+  `ucitscompliance` string,
+  `revisioncompany` string,
+  `indextype` string,
+  `securitieslending` string,
+  `top10holdings` array<string>, -- List of Top 10 stock holdings in the ETF or ETN
+  `exposurecountry_netherlands` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_unitedkingdom` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_luxembourg` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_other` float, -- percentage exposure to a country between 0 and 1
+  `exposuresector_technology` float, -- percentage exposure to technology stocks between 0 and 1
+  `exposuresector_consumerstaples` float, -- percentage exposure to consumer staples stocks between 0 and 1
+  `exposuresector_industrials` float, -- percentage exposure to industrial stocks between 0 and 1
+  `exposuresector_consumerdiscretionary` float, -- percentage exposure to consumer discretionary stocks between 0 and 1
+  `exposuresector_other` float, -- percentage exposure to other sectors between 0 and 1
+  `fundsizemillions` float,
+  `exposurecountry_belgium` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_france` float, -- percentage exposure to a country between 0 and 1
+  `exposuresector_financials` float, -- percentage exposure to financial company stocks between 0 and 1
+  `exposuresector_basicmaterials` float, -- percentage exposure to basic materials stocks between 0 and 1
+  `exposuresector_realestate` float, -- percentage exposure to real estate stocks between 0 and 1
+  `exposurecountry_austria` float, -- percentage exposure to a country between 0 and 1
+  `exposuresector_utilities` float, -- percentage exposure to utilities company stocks between 0 and 1
+  `exposuresector_energy` float, -- percentage exposure to energy company stocks between 0 and 1
+  `exposurecountry_serbia` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_romania` float, -- percentage exposure to a country between 0 and 1
+  `exposuresector_healthcare` float, -- percentage exposure to healthcare company stocks between 0 and 1
+  `exposurecountry_china` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_mexico` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_indonesia` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_saudiarabia` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_unitedarabemirates` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_malaysia` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_southkorea` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_brazil` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_israel` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_southafrica` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_qatar` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_uruguay` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_dominicanrepublic` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_italy` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_germany` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_spain` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_unitedstates` float, -- percentage exposure to a country between 0 and 1
+  `exposuresector_telecommunication` float, -- percentage exposure to telecommincations company stocks between 0 and 1
+  `exposurecountry_japan` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_canada` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_australia` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_ireland` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_caymanislands` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_hongkong` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_bermuda` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_liberia` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_hungary` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_switzerland` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_singapore` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_taiwan` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_croatia` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_newzealand` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_india` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_norway` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_finland` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_denmark` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_sweden` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_country-gg` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_jersey` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_greece` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_chile` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_oman` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_philippines` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_ivorycoast` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_portugal` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_turkey` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_thailand` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_poland` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_argentina` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_macedonia` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_peru` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_russia` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_cyprus` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_colombia` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_czechrepublic` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_slovakia` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_slovenia` float, -- percentage exposure to a country between 0 and 1
+  `exposurecountry_bulgaria` float -- percentage exposure to a country between 0 and 1
+  )
