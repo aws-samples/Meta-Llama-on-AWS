@@ -64,11 +64,11 @@ paid annually and measured as a percent of your investment in the fund. 0.30 per
 Expensive: Whether the fund is expensive for investors or not. 0 means not expensive, 1 means expensive.
 — data —
 |isin|wkn|name|fundprovider|legalstructure|totalexpenseratio|Expensive|
-|GB00BNRRF659|A3GVCX|CoinShares Physical Staked Cardano|CoinShares|ETN|0.0|0|
-|BGPLWIG04173|A2JAHA|Expat Poland WIG20 UCITS ETF|expatcapital|ETF|0.0138|0|
-|CH0445689208|A2TT3D|21Shares Crypto Basket Index ETP|21Shares|ETN|0.025|1|
-|CH1114873776|A3GSS0|21Shares Solana ETP|21Shares|ETN|0.025|1|
-|GB00BNRRF105|A3GY74|CoinShares Physical Staked Algorand|CoinShares|ETN|0.0|<MASK>|
+|GB00Bxxxxxxx|A3Gxxx|Coinx..... Staked Cardano|CoinShares|ETN|0.0|0|
+|BGPLWxxxxxxx|A2Jxxx|Expax.....UCITS ETF|expatcapital|ETF|0.0138|0|
+|CH044xxxxxxx|A2Txxx|21Shx.....ket Index ETP|21Shares|ETN|0.025|1|
+|CH111xxxxxxx|A3Gxxx|21Shx.....|21Shares|ETN|0.025|1|
+|GB00Bxxxxxxx|A3Gxxx|Coinx..... Staked Algorand|CoinShares|ETN|0.0|<MASK>|
 Please use the supplied data to predict the <MASK>. Fund is expensive[1] or not[0]?
 Answer: 0
 Please provide an analysis and interpretation of the results to answer the original {question}.
