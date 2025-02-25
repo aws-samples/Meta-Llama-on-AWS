@@ -98,8 +98,7 @@ While the job is running you can monitor the log `tuning_job.log` and GPU utliza
 This training run also produces results in the form of EC2 metrics. The results can be found in the `results` directory. The results directory contains the following two files:
 
 1. `ec2_metrics.csv`: This file contains instance utilization metrics. For example, the mean GPU utilization, CPU utilization and the memory used up by the instance. These metrics are only collected during the training process. View an example of some of the metrics generated below:
-
-  ```{.csv}
+    ```{.csv}
   timestamp,cpu_percent_mean,memory_percent_mean,memory_used_mean,gpu_utilization_mean,gpu_memory_used_mean,gpu_memory_free_mean,gpu_memory_total_mean
     2025-02-21 19:42:37,0.0,2.9,7.651355743408203,0.0,16002.375,29370.312500000004,46068.0
     2025-02-21 19:42:42,1.9079216328354662,3.321088803677962,7.926143636541902,72.13185182101137,16602.57081138804,28770.116622093094,46068.0
