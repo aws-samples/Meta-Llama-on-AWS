@@ -1,9 +1,12 @@
-import logging
-from dataclasses import dataclass, field
 import os
-import random
 import torch
+import nvitop
+import random
+import logging
+import globals as g
 from datasets import load_dataset
+from dataclasses import dataclass, field
+from ec2_metrics import EC2MetricsCallback
 from transformers import AutoTokenizer, TrainingArguments
 from trl.commands.cli_utils import  TrlParser
 from transformers import (
@@ -15,6 +18,9 @@ from transformers import (
 )
 from peft import LoraConfig
 from trl import SFTTrainer
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 @dataclass
 class ScriptArguments:
@@ -73,7 +79,7 @@ def training_function(script_args, training_args):
             bnb_4bit_compute_dtype=torch_dtype,
             bnb_4bit_quant_storage=quant_storage_dtype,
         )
-
+    logger.info(f"Going to load the model")
     model = AutoModelForCausalLM.from_pretrained(
         script_args.model_id,
         quantization_config=quantization_config,
@@ -102,6 +108,7 @@ def training_function(script_args, training_args):
     ################
     # Training
     ################
+    logger.info(f"Defining the SFTTrainer")
     trainer = SFTTrainer(
         model=model,
         args=training_args,
@@ -116,6 +123,7 @@ def training_function(script_args, training_args):
             "add_special_tokens": False,  
             "append_concat_token": False,  
         },
+        callbacks=[EC2MetricsCallback],
     )
     if trainer.accelerator.is_main_process:
         trainer.model.print_trainable_parameters()
@@ -126,7 +134,23 @@ def training_function(script_args, training_args):
     checkpoint = None
     if training_args.resume_from_checkpoint is not None:
         checkpoint = training_args.resume_from_checkpoint
+    logger.info('Going to start training the model')
     result = trainer.train(resume_from_checkpoint=checkpoint)
+    # Format the training stats in a readable way
+    output_text = f"""Training Statistics:
+    Global Steps: {result.global_step}
+    Training Loss: {result.training_loss:.4f}
+
+    Metrics:
+    - Train Runtime: {result.metrics['train_runtime']:.3f} seconds
+    - Training Samples/Second: {result.metrics['train_samples_per_second']:.3f}
+    - Training Steps/Second: {result.metrics['train_steps_per_second']:.3f}
+    - Total FLOPS: {result.metrics['total_flos']:.2e}
+    - Final Train Loss: {result.metrics['train_loss']:.4f}
+    """
+    # Save to a text file
+    with open(os.path.join(g.RESULTS_DIR, "training_stats.txt"), 'w') as f:
+        f.write(output_text)
     print(result)
     ##########################
     # SAVE MODEL
