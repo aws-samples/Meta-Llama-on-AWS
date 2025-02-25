@@ -149,7 +149,7 @@ def training_function(script_args, training_args):
     - Final Train Loss: {result.metrics['train_loss']:.4f}
     """
     # Save to a text file
-    with open(os.path.join(g.RESULTS_DIR, "training_stats.txt"), 'w') as f:
+    with open(os.path.join(g.RESULTS_DIR, g.TRAINING_STATS_FNAME), 'w') as f:
         f.write(output_text)
     print(result)
     ##########################
