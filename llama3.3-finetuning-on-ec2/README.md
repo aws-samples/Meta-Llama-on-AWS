@@ -24,7 +24,7 @@ In your chosen region (for ex: us-west-2), use the AWS Console or AWS CLI to lau
 * SSH to your instance's public IP using the key pair you specified above.
   * Ex: `ssh -i KEYPAIR.pem ec2-user@INSTANCE_PUBLIC_IP_ADDRESS`
 
-### 1.1 Clone the Github respository
+### 1.1 Clone the GitHub respository
 
 ```
 sudo apt-get update
@@ -55,11 +55,6 @@ source .venv/bin/activate
 
 # Install dependencies from requirements.txt
 uv pip install -r requirements.txt
-
-# Set environment variable for UV
-export UV_PROJECT_ENVIRONMENT=.venv
-
-python -m ipykernel install --user --name=.venv --display-name="Python (uv env)"
 ```
 
 ## 2. Run Fine Tuning
