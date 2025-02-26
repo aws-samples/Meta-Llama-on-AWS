@@ -8,6 +8,7 @@ import time
 import nvitop
 import psutil
 import logging
+import globals as g
 from transformers import TrainerCallback
 from nvitop import Device, ResourceMetricCollector
 
@@ -18,18 +19,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# contains global variables used across the repository
-
-# Results directory where all the results are stored
-RESULTS_DIR: str = "results"
-
-# Result files for collecting metrics during the training process
-EC2_SYSTEM_METRICS_FNAME: str = "ec2_metrics.csv"
-EC2_UTILIZATION_METRICS_INTERVAL: int = 5
-TRAINING_STATS_FNAME: str = "training_stats.txt"
-
 # Update the metrics file path to be in the results directory
-METRICS_FILE_PATH = os.path.join(RESULTS_DIR, EC2_SYSTEM_METRICS_FNAME)
+METRICS_FILE_PATH = os.path.join(g.RESULTS_DIR, g.EC2_SYSTEM_METRICS_FNAME)
 
 # Global flag to control data collection
 collecting = True
@@ -153,7 +144,7 @@ def _collect_ec2_utilization_metrics():
     logger.info("Starting daemon collector to run in background")
     collector.daemonize(
         on_collect,
-        interval=EC2_UTILIZATION_METRICS_INTERVAL,
+        interval=g.EC2_UTILIZATION_METRICS_INTERVAL,
         on_stop=stop_collect,
     )
 
