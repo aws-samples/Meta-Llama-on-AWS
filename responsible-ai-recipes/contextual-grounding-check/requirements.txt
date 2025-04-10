@@ -1,0 +1,6 @@
+boto3
+chromadb==0.5.3
+langchain
+langchain-aws
+langchain-chroma
+langchain-core
