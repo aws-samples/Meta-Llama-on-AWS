@@ -1,0 +1,42 @@
+database: 
+
+table_schemas:
+    -  |
+        CREATE TABLE insurance_db.providers -- Table name
+        (
+        Insurance_id INT(10), -- insurance identifier
+        Provider_name VARCHAR(100), -- name of the provider
+        Coverage_type VARCHAR(50), -- type of coverage
+        Contact_email VARCHAR(100), -- provider contact email
+        PRIMARY KEY (Insurance_id)
+        )
+    -   |
+        CREATE TABLE healthcare_db.patients -- Table name
+        (
+        Patient_id INT(10), -- patient identifier
+        First_name VARCHAR(50), -- patient first name
+        Last_name VARCHAR(50), -- patient last name
+        Date_of_birth DATE, -- patient date of birth
+        Gender VARCHAR(10), -- patient gender
+        Contact_number VARCHAR(20), -- patient phone contact
+        Insurance_id INT(10), -- insurance provider id
+        PRIMARY KEY (Patient_id),
+        FOREIGN KEY (Insurance_id) REFERENCES insurance_db.providers(Insurance_id)
+        )
+
+questions: |
+    1. List all patients along with their insurance provider names.
+    2. How many patients are enrolled with each insurance provider?
+    3. Find the most popular insurance provider among patients.
+    4. List all female patients with a specific coverage type.
+    5. Find the average age of patients for each insurance provider.
+    6. List all providers that don't have any patients enrolled.
+    7. Find patients born after a specific date who have a particular coverage type.
+    8. Count patients by gender for each insurance provider.
+    9. Find the oldest and youngest patient for each insurance provider.
+    10. List all patients with a specific provider and sort by their date of birth.
+    11. Find insurance providers that have more than X number of patients.
+    12. List patients who have insurance with a provider whose name contains a specific keyword.
+    13. Find the most common gender among patients for each coverage type.
+    14. List all patients without insurance.
+    15. Calculate the percentage of patients with each coverage type.
