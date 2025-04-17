@@ -1,4 +1,4 @@
-# RAG Recipes
+# Text2SQL Recipe for Llama 4
 
 This repository provides a *Cloudformation template* to deploy a SageMaker Environment where you can explore, test, and experiment Text-to-SQL using Llama 4 in Us-East-1.
 
