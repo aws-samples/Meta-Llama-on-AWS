@@ -1,0 +1,122 @@
+[
+  {
+    "Insurance_id": 101,
+    "Provider_name": "Blue Shield Health Insurance",
+    "Coverage_type": "Medical",
+    "Contact_email": "support@blueshield.com"
+  },
+  {
+    "Insurance_id": 102,
+    "Provider_name": "Guardian Dental Care",
+    "Coverage_type": "Dental",
+    "Contact_email": "info@guardiandentalcare.com"
+  },
+  {
+    "Insurance_id": 103,
+    "Provider_name": "Vision Plus",
+    "Coverage_type": "Vision",
+    "Contact_email": "contact@visionplus.org"
+  },
+  {
+    "Insurance_id": 104,
+    "Provider_name": "United Health Group",
+    "Coverage_type": "Medical",
+    "Contact_email": "service@unitedhealthgroup.com"
+  },
+  {
+    "Insurance_id": 105,
+    "Provider_name": "Prestige Life Insurance",
+    "Coverage_type": "Life",
+    "Contact_email": "claims@prestigelife.com"
+  },
+  {
+    "Insurance_id": 106,
+    "Provider_name": "Medicare Health Solutions",
+    "Coverage_type": "Medical",
+    "Contact_email": "medicare@healthsolutions.gov"
+  },
+  {
+    "Insurance_id": 107,
+    "Provider_name": "Dental Health Alliance",
+    "Coverage_type": "Dental",
+    "Contact_email": "support@dentalhealthalliance.com"
+  },
+  {
+    "Insurance_id": 108,
+    "Provider_name": "Clear Vision Insurance",
+    "Coverage_type": "Vision",
+    "Contact_email": "help@clearvision.com"
+  },
+  {
+    "Insurance_id": 109,
+    "Provider_name": "Family Health Insurance Co.",
+    "Coverage_type": "Medical",
+    "Contact_email": "care@familyhealth.com"
+  },
+  {
+    "Insurance_id": 110,
+    "Provider_name": "Secure Life & Disability",
+    "Coverage_type": "Life",
+    "Contact_email": "info@securelife.com"
+  },
+  {
+    "Insurance_id": 111,
+    "Provider_name": "Premier Health Partners",
+    "Coverage_type": "Medical",
+    "Contact_email": "contact@premierhealthpartners.org"
+  },
+  {
+    "Insurance_id": 112,
+    "Provider_name": "SmileBright Dental Insurance",
+    "Coverage_type": "Dental",
+    "Contact_email": "service@smilebright.com"
+  },
+  {
+    "Insurance_id": 113,
+    "Provider_name": "OpticalCare Insurance",
+    "Coverage_type": "Vision",
+    "Contact_email": "help@opticalcare.com"
+  },
+  {
+    "Insurance_id": 114,
+    "Provider_name": "National Health Services",
+    "Coverage_type": "Medical",
+    "Contact_email": "inquiries@nationalhealthservices.gov"
+  },
+  {
+    "Insurance_id": 115,
+    "Provider_name": "Complete Health Coverage",
+    "Coverage_type": "Comprehensive",
+    "Contact_email": "info@completehealthcoverage.com"
+  },
+  {
+    "Insurance_id": 116,
+    "Provider_name": "Senior Health Alliance",
+    "Coverage_type": "Medical",
+    "Contact_email": "seniors@healthalliance.org"
+  },
+  {
+    "Insurance_id": 117,
+    "Provider_name": "Child Health Protection",
+    "Coverage_type": "Medical",
+    "Contact_email": "children@healthprotection.org"
+  },
+  {
+    "Insurance_id": 118,
+    "Provider_name": "Metro Disability Insurance",
+    "Coverage_type": "Disability",
+    "Contact_email": "claims@metrodisability.com"
+  },
+  {
+    "Insurance_id": 119,
+    "Provider_name": "Wellness Health Group",
+    "Coverage_type": "Medical",
+    "Contact_email": "wellness@healthgroup.com"
+  },
+  {
+    "Insurance_id": 120,
+    "Provider_name": "Accident & Emergency Coverage",
+    "Coverage_type": "Emergency",
+    "Contact_email": "emergency@accidentcoverage.com"
+  }
+]

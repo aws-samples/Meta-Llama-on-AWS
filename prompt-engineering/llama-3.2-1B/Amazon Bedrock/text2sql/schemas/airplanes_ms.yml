@@ -1,0 +1,24 @@
+database: equipment_db
+
+table_name: airplanes
+
+table_schema: |
+    CREATE TABLE equipment_db.airplanes -- Table name
+    (
+    Airplane_id INT(10), -- airplane id
+    Producer VARCHAR(20), -- name of the producer
+    Type VARCHAR(10), -- airplane type
+    PRIMARY KEY (Airplane_id)
+    )
+
+questions: |
+    1. How many unique airplane producers are represented in the database?
+    2. What is the most common airplane type in the database?
+    3. Retrieve a list of all airplane IDs and their corresponding producers.
+    4. Find all airplanes produced by a specific manufacturer (e.g., Boeing or Airbus).
+    5. Get the number of airplanes for each type, sorted by count in descending order.
+    6. Retrieve all airplane IDs and types where the type contains a specific substring (e.g., "737" or "A320").
+    7. Find the airplane ID and producer for the airplane with the highest ID value.
+    8. Get a list of unique producers, along with the count of airplanes for each producer.
+    9. Retrieve all airplane IDs, producers, and types where the producer name starts with a specific letter (e.g., "B" for Boeing).
+    10. Find all airplane IDs and types where the type is not equal to a specific value (e.g., "737").

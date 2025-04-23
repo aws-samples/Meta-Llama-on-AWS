@@ -1,0 +1,182 @@
+[
+  {
+    "Patient_id": 1001,
+    "First_name": "John",
+    "Last_name": "Smith",
+    "Date_of_birth": "1982-05-15",
+    "Gender": "Male",
+    "Contact_number": "555-123-4567",
+    "Insurance_id": 101
+  },
+  {
+    "Patient_id": 1002,
+    "First_name": "Emily",
+    "Last_name": "Johnson",
+    "Date_of_birth": "1990-08-22",
+    "Gender": "Female",
+    "Contact_number": "555-234-5678",
+    "Insurance_id": 103
+  },
+  {
+    "Patient_id": 1003,
+    "First_name": "Michael",
+    "Last_name": "Williams",
+    "Date_of_birth": "1975-11-10",
+    "Gender": "Male",
+    "Contact_number": "555-345-6789",
+    "Insurance_id": 102
+  },
+  {
+    "Patient_id": 1004,
+    "First_name": "Jessica",
+    "Last_name": "Brown",
+    "Date_of_birth": "1988-03-30",
+    "Gender": "Female",
+    "Contact_number": "555-456-7890",
+    "Insurance_id": 104
+  },
+  {
+    "Patient_id": 1005,
+    "First_name": "David",
+    "Last_name": "Davis",
+    "Date_of_birth": "1965-09-18",
+    "Gender": "Male",
+    "Contact_number": "555-567-8901",
+    "Insurance_id": 101
+  },
+  {
+    "Patient_id": 1006,
+    "First_name": "Sarah",
+    "Last_name": "Miller",
+    "Date_of_birth": "1992-12-05",
+    "Gender": "Female",
+    "Contact_number": "555-678-9012",
+    "Insurance_id": 105
+  },
+  {
+    "Patient_id": 1007,
+    "First_name": "James",
+    "Last_name": "Wilson",
+    "Date_of_birth": "1970-04-25",
+    "Gender": "Male",
+    "Contact_number": "555-789-0123",
+    "Insurance_id": 102
+  },
+  {
+    "Patient_id": 1008,
+    "First_name": "Jennifer",
+    "Last_name": "Moore",
+    "Date_of_birth": "1986-07-14",
+    "Gender": "Female",
+    "Contact_number": "555-890-1234",
+    "Insurance_id": 103
+  },
+  {
+    "Patient_id": 1009,
+    "First_name": "Robert",
+    "Last_name": "Taylor",
+    "Date_of_birth": "1958-02-28",
+    "Gender": "Male",
+    "Contact_number": "555-901-2345",
+    "Insurance_id": 104
+  },
+  {
+    "Patient_id": 1010,
+    "First_name": "Lisa",
+    "Last_name": "Anderson",
+    "Date_of_birth": "1979-10-11",
+    "Gender": "Female",
+    "Contact_number": "555-012-3456",
+    "Insurance_id": 101
+  },
+  {
+    "Patient_id": 1011,
+    "First_name": "Daniel",
+    "Last_name": "Thomas",
+    "Date_of_birth": "1995-06-20",
+    "Gender": "Male",
+    "Contact_number": "555-123-4567",
+    "Insurance_id": 105
+  },
+  {
+    "Patient_id": 1012,
+    "First_name": "Michelle",
+    "Last_name": "Jackson",
+    "Date_of_birth": "1983-01-07",
+    "Gender": "Female",
+    "Contact_number": "555-234-5678",
+    "Insurance_id": 102
+  },
+  {
+    "Patient_id": 1013,
+    "First_name": "William",
+    "Last_name": "White",
+    "Date_of_birth": "1968-08-15",
+    "Gender": "Male",
+    "Contact_number": "555-345-6789",
+    "Insurance_id": 103
+  },
+  {
+    "Patient_id": 1014,
+    "First_name": "Elizabeth",
+    "Last_name": "Harris",
+    "Date_of_birth": "1990-11-22",
+    "Gender": "Female",
+    "Contact_number": "555-456-7890",
+    "Insurance_id": 104
+  },
+  {
+    "Patient_id": 1015,
+    "First_name": "Christopher",
+    "Last_name": "Martin",
+    "Date_of_birth": "1972-05-03",
+    "Gender": "Male",
+    "Contact_number": "555-567-8901",
+    "Insurance_id": 101
+  },
+  {
+    "Patient_id": 1016,
+    "First_name": "Amanda",
+    "Last_name": "Thompson",
+    "Date_of_birth": "1989-09-28",
+    "Gender": "Female",
+    "Contact_number": "555-678-9012",
+    "Insurance_id": 105
+  },
+  {
+    "Patient_id": 1017,
+    "First_name": "Matthew",
+    "Last_name": "Garcia",
+    "Date_of_birth": "1980-03-17",
+    "Gender": "Male",
+    "Contact_number": "555-789-0123",
+    "Insurance_id": 102
+  },
+  {
+    "Patient_id": 1018,
+    "First_name": "Ashley",
+    "Last_name": "Martinez",
+    "Date_of_birth": "1993-12-10",
+    "Gender": "Female",
+    "Contact_number": "555-890-1234",
+    "Insurance_id": 103
+  },
+  {
+    "Patient_id": 1019,
+    "First_name": "Kevin",
+    "Last_name": "Robinson",
+    "Date_of_birth": "1977-02-21",
+    "Gender": "Male",
+    "Contact_number": "555-901-2345",
+    "Insurance_id": 104
+  },
+  {
+    "Patient_id": 1020,
+    "First_name": "Stephanie",
+    "Last_name": "Clark",
+    "Date_of_birth": "1987-07-04",
+    "Gender": "Female",
+    "Contact_number": "555-012-3456",
+    "Insurance_id": 101
+  }
+]
