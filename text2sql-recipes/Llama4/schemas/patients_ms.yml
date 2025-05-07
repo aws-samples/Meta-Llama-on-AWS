@@ -1,0 +1,29 @@
+database: healthcare_db
+
+table_name: patients
+
+table_schema: |
+    CREATE TABLE healthcare_db.patients -- Table name
+    (
+    Patient_id INT(10), -- patient identifier
+    First_name VARCHAR(50), -- patient first name
+    Last_name VARCHAR(50), -- patient last name
+    Date_of_birth DATE, -- patient date of birth
+    Gender VARCHAR(10), -- patient gender
+    Contact_number VARCHAR(20), -- patient phone contact
+    Insurance_id INT(10), -- insurance provider id
+    PRIMARY KEY (Patient_id),
+    FOREIGN KEY (Insurance_id) REFERENCES insurance_db.providers(Insurance_id)
+    )
+
+questions: |
+    1. How many patients are currently registered in the database?
+    2. List all patients sorted by their last name in alphabetical order.
+    3. Find all patients born before a specific date.
+    4. How many patients are associated with each insurance provider?
+    5. Find patients who have a specific insurance provider.
+    6. List all male/female patients.
+    7. What is the average age of patients in the database?
+    8. Find patients with last names that start with a specific letter.
+    9. List patients born in a specific year.
+    10. Count the number of patients by gender.
