@@ -1,0 +1,9 @@
+transformers
+datasets
+accelerate
+evaluate
+bitsandbytes
+huggingface_hub
+trl
+peft
+scikit-learn

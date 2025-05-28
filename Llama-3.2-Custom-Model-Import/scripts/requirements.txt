@@ -1,0 +1,8 @@
+transformers==4.43.1
+datasets==2.18.0
+accelerate==0.29.3
+evaluate==0.4.1
+bitsandbytes==0.43.1
+huggingface_hub
+trl==0.8.6
+peft==0.10.0

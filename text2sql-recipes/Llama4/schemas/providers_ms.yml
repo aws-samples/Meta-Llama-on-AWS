@@ -1,0 +1,25 @@
+database: insurance_db
+
+table_name: providers
+
+table_schema: |
+    CREATE TABLE insurance_db.providers -- Table name
+    (
+    Insurance_id INT(10), -- insurance identifier
+    Provider_name VARCHAR(100), -- name of the provider
+    Coverage_type VARCHAR(50), -- type of coverage
+    Contact_email VARCHAR(100), -- provider contact email
+    PRIMARY KEY (Insurance_id)
+    )
+
+questions: |
+    1. List all insurance providers in the database.
+    2. How many unique coverage types are available in the system?
+    3. Find all providers that offer a specific type of coverage.
+    4. List providers sorted by their names alphabetically.
+    5. Find the provider with a specific Insurance_id.
+    6. Count the number of providers for each coverage type.
+    7. Find providers with names containing a specific keyword.
+    8. List all provider contact emails that use a specific domain.
+    9. Find the most common coverage type among providers.
+    10. List all providers that have "Health" in their name.
