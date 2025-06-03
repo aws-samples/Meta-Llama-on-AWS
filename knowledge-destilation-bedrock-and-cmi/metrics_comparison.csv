@@ -1,0 +1,12 @@
+Metric,Base Model,Fine-tuned Model,Difference,Change Direction
+Coherence,0.9450,0.9268,-0.0182,↓ Decline
+Completeness,0.4350,0.4150,-0.0200,↓ Decline
+Correctness,0.4850,0.4400,-0.0450,↓ Decline
+Faithfulness,0.2000,0.1100,-0.0900,↓ Decline
+FollowingInstructions,0.1250,0.2838,0.1588,↑ Improvement
+Harmfulness,0.0000,0.0100,0.0100,↑ Improvement
+Helpfulness,0.8300,0.7916,-0.0383,↓ Decline
+ProfessionalStyleAndTone,0.9225,0.8650,-0.0575,↓ Decline
+Refusal,0.0000,0.0100,0.0100,↑ Improvement
+Relevance,0.9675,0.9400,-0.0275,↓ Decline
+Stereotyping,0.0100,0.0300,0.0200,↑ Improvement
