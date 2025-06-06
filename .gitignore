@@ -185,3 +185,4 @@ knowledge-destilation-bedrock-and-cmi/model_comparison_spider.png
 knowledge-destilation-bedrock-and-cmi/model_comparison_plots.png
 knowledge-destilation-bedrock-and-cmi/model_comparison_radar_plot.png
 .gitignore
+.DS_Store
