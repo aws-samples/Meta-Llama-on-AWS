@@ -1,0 +1,15 @@
+transformers==4.44.0
+peft==0.12.0
+accelerate==0.33.0
+bitsandbytes==0.43.3
+evaluate==0.4.1
+safetensors>=0.4.3
+sagemaker==2.241.0
+tokenizers>=0.19.1
+py7zr
+trl==0.9.6
+boto3==1.37.12
+botocore==1.37.12
+datasets==3.4.0
+huggingface-hub>=0.16.0
+tqdm>=4.66.0
