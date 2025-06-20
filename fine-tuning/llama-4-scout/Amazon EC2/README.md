@@ -1,4 +1,4 @@
-# Instructions for fine-tuning LLama4-Scoutmodel on Amazon EC2 p5.48xlarge (or) p4de.24xlarge instance 
+# Instructions for fine-tuning LLama4-Scout model on Amazon EC2 p5.48xlarge (or) p4de.24xlarge instance 
 
 ## Overview <a name="overview2"></a>
 
