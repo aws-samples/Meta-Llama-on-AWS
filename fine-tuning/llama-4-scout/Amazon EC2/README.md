@@ -10,7 +10,7 @@ Note: You can increase the `max_seq_length`, `batch_size` or tune other hyperpar
 
 ## Prequisites
 
-### 1.1 Launch Amazon EC2 instance - g6e.48xlarge
+### 1.1 Launch Amazon EC2 instance 
 
 In your chosen region (for ex: us-west-2), use the AWS Console or AWS CLI to launch an instance with the following configuration:
 
