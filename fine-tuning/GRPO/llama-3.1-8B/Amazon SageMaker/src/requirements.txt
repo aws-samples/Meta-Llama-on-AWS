@@ -1,0 +1,10 @@
+transformers==4.53.3
+sentence_transformers
+datasets==3.2.0
+accelerate==1.9.0
+bitsandbytes==0.46.1
+trl==0.19.1
+peft==0.16.0
+huggingface_hub
+scikit-learn
+torch
