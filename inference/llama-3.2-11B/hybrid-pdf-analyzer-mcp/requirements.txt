@@ -1,0 +1,7 @@
+flask==3.0.3
+boto3==1.35.39
+pdfplumber==0.11.7
+streamlit
+requests
+botocore
+werkzeug==3.0.1
