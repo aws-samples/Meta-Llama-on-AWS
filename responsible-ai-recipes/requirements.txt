@@ -1,0 +1,8 @@
+boto3
+chromadb==0.5.3
+deepeval
+langchain
+langchain-aws
+langchain-chroma
+langchain-text-splitters
+pypdf
