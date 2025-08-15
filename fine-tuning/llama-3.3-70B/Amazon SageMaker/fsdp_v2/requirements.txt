@@ -7,4 +7,4 @@ trl==0.12.0
 peft==0.14.0
 huggingface_hub
 scikit-learn
-torch==2.4.0
+torch==2.8.0
