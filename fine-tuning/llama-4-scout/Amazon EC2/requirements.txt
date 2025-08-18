@@ -4,7 +4,7 @@ torchao --index-url https://download.pytorch.org/whl/nightly/cu128
 git+https://github.com/pytorch/torchtune.git@5d51c25cedfb6ba7b00e03cb2fef4f9cdb7baebd#egg=torchtune
 peft
 safetensors
-transformers==4.51.0
+transformers==4.53.0
 huggingface_hub[hf_xet]
 huggingface_hub[cli]
 scikit-learn
