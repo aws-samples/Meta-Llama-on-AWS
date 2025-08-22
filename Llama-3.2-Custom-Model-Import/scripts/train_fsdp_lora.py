@@ -5,25 +5,24 @@ import random
 import torch
 import tarfile
 import json
+import logging
+import glob
 from multiprocessing import Pool
-import pkg_resources
-import sys
+from sklearn.model_selection import train_test_split
 
 from datasets import load_dataset
 from transformers import AutoTokenizer, TrainingArguments
-from trl.commands.cli_utils import TrlParser
+from trl.scripts.utils import TrlParser
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
     set_seed,
 )
-from peft import LoraConfig
+from peft import LoraConfig, get_peft_model
 
 
 from trl import SFTTrainer
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Comment in if you want to use the Llama 3 instruct template but make sure to add modules_to_save
 # LLAMA_3_CHAT_TEMPLATE="{% set loop_messages = messages %}{% for message in loop_messages %}{% set content = '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n'+ message['content'] | trim + '<|eot_id|>' %}{% if loop.index0 == 0 %}{% set content = bos_token + content %}{% endif %}{{ content }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}{% endif %}"
@@ -43,30 +42,34 @@ LLAMA_3_CHAT_TEMPLATE = (
     "{{ '\n\nAssistant: ' }}"
     "{% endif %}"
 )
-def print_library_versions():
-    libraries = [
-        "datasets",
-        "transformers",
-        "accelerate",
-        "evaluate",
-        "bitsandbytes",
-        "huggingface_hub",
-        "trl",
-        "peft",
-        "torch",
-        "scikit-learn"
-    ]
-    
-    logger.info(f"Python version: {sys.version}")
-    logger.info("Library versions:")
-    for lib in libraries:
-        try:
-            version = pkg_resources.get_distribution(lib).version
-            logger.info(f"{lib}: {version}")
-        except pkg_resources.DistributionNotFound:
-            logger.info(f"{lib}: Not installed")
+
 
 # ACCELERATE_USE_FSDP=1 FSDP_CPU_RAM_EFFICIENT_LOADING=1 torchrun --nproc_per_node=4 ./scripts/run_fsdp_qlora.py --config llama_3_70b_fsdp_qlora.yaml
+
+def get_data_path(channel):
+    # Check for processing job path
+    processing_path = os.environ.get(f'SM_PROCESSING_OUTPUT_{channel.upper()}')
+    if processing_path:
+        return processing_path
+    
+    # Check for training job path
+    training_path = os.environ.get(f'SM_CHANNEL_{channel.upper()}')
+    if training_path:
+        return training_path
+    
+    # Default fallback paths
+    default_paths = {
+        'train': '/opt/ml/input/data/train',
+        'test': '/opt/ml/input/data/test',
+        'validation': '/opt/ml/input/data/validation'
+    }
+    return default_paths.get(channel, f'/opt/ml/input/data/{channel}')
+
+def load_dataset_from_path(path):
+    files = glob.glob(os.path.join(path, '*.json'))
+
+def load_dataset_from_path(path):
+    files = glob.glob(os.path.join(path, '*.json'))
 
 def add_to_tar(args):
     tar_path, file_path, arcname = args
@@ -129,16 +132,39 @@ def training_function(script_args, training_args):
     # Dataset
     ################
 
-    train_dataset = load_dataset(
-        "json",
-        data_files=os.path.join(script_args.train_dataset_path, "dataset.json"),
-        split="train",
-    )
-    test_dataset = load_dataset(
-        "json",
-        data_files=os.path.join(script_args.test_dataset_path, "dataset.json"),
-        split="train",
-    )
+
+    # Load datasets
+    train_path = get_data_path('train')
+    test_path = get_data_path('test')
+
+    
+    print("Loading datasets")
+    print(f"training folder:{script_args.train_dataset_path}")
+ 
+    try:
+        train_dataset = load_dataset(
+            "json",
+            data_files=os.path.join(script_args.train_dataset_path, "train.json"),
+            split="train",
+        )
+    except Exception as e:
+        print(f"Error loading train dataset: {e}")
+        raise
+
+    print(f"test folder: {script_args.test_dataset_path}")
+    try:
+        test_dataset = load_dataset(
+            "json",
+            data_files=os.path.join(script_args.test_dataset_path, "test.json"),
+            split="train",  # Use "train" split here as well
+        )
+    except Exception as e:
+        print(f"Error loading test dataset: {e}")
+        print("Splitting train dataset for evaluation.")
+        train_dataset, test_dataset = train_test_split(train_dataset, test_size=0.2, random_state=42)
+
+    print(f"Train dataset size: {len(train_dataset)}")
+    print(f"Test dataset size: {len(test_dataset)}")
 
     ################
     # Model & Tokenizer
@@ -146,8 +172,9 @@ def training_function(script_args, training_args):
 
     # Tokenizer
     tokenizer = AutoTokenizer.from_pretrained(script_args.model_id, use_fast=True)
+    #tokenizer = AutoTokenizer.from_pretrained(script_args.model_id)
     tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.chat_template = LLAMA_3_CHAT_TEMPLATE
+    #tokenizer.chat_template = LLAMA_3_CHAT_TEMPLATE
 
     # template dataset
     def template_dataset(examples):
@@ -163,13 +190,11 @@ def training_function(script_args, training_args):
         for index in random.sample(range(len(train_dataset)), 2):
             print(train_dataset[index]["text"])
     training_args.distributed_state.wait_for_everyone()  # wait for all processes to print
-
     # Model
     torch_dtype = torch.bfloat16
-
+    
     model = AutoModelForCausalLM.from_pretrained(
         script_args.model_id,
-        #quantization_config=quantization_config,
         attn_implementation="flash_attention_2",
         torch_dtype=torch_dtype,
         use_cache=(
@@ -195,6 +220,8 @@ def training_function(script_args, training_args):
         # modules_to_save = ["lm_head", "embed_tokens"] # add if you want to use the Llama 3 instruct template
     )
 
+
+
     ################
     # Training
     ################
@@ -202,16 +229,10 @@ def training_function(script_args, training_args):
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        dataset_text_field="text",
         eval_dataset=test_dataset,
         peft_config=peft_config,
-        max_seq_length=script_args.max_seq_length,
-        tokenizer=tokenizer,
-        packing=True,
-        dataset_kwargs={
-            "add_special_tokens": False,  # We template with special tokens
-            "append_concat_token": False,  # No need to add additional separator token
-        },
+        processing_class=tokenizer,
+        
     )
     if trainer.accelerator.is_main_process:
         trainer.model.print_trainable_parameters()
@@ -246,7 +267,6 @@ def training_function(script_args, training_args):
 
 
 if __name__ == "__main__":
-    print_library_versions()
     parser = TrlParser((ScriptArguments, TrainingArguments))
     script_args, training_args = parser.parse_args_and_config()
 
