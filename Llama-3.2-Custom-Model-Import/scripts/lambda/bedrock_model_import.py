@@ -24,7 +24,8 @@ def check_job_status(bedrock, job_name):
     return None, None, None
 
 def lambda_handler(event, context):
-    REGION_NAME = 'us-west-2'
+    session = boto3.session.Session()
+    REGION_NAME = session.region_name
     bedrock = boto3.client(service_name='bedrock',
                        region_name=REGION_NAME)
     # Generate a unique job name with timestamp and random number
