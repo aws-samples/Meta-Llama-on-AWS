@@ -12,14 +12,14 @@ from sklearn.model_selection import train_test_split
 
 from datasets import load_dataset
 from transformers import AutoTokenizer, TrainingArguments
-from trl.commands.cli_utils import TrlParser
+from trl.scripts.utils import TrlParser
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
     set_seed,
 )
-from peft import LoraConfig
+from peft import LoraConfig, get_peft_model
 
 
 from trl import SFTTrainer
@@ -172,8 +172,9 @@ def training_function(script_args, training_args):
 
     # Tokenizer
     tokenizer = AutoTokenizer.from_pretrained(script_args.model_id, use_fast=True)
+    #tokenizer = AutoTokenizer.from_pretrained(script_args.model_id)
     tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.chat_template = LLAMA_3_CHAT_TEMPLATE
+    #tokenizer.chat_template = LLAMA_3_CHAT_TEMPLATE
 
     # template dataset
     def template_dataset(examples):
@@ -189,13 +190,11 @@ def training_function(script_args, training_args):
         for index in random.sample(range(len(train_dataset)), 2):
             print(train_dataset[index]["text"])
     training_args.distributed_state.wait_for_everyone()  # wait for all processes to print
-
     # Model
     torch_dtype = torch.bfloat16
-
+    
     model = AutoModelForCausalLM.from_pretrained(
         script_args.model_id,
-        #quantization_config=quantization_config,
         attn_implementation="flash_attention_2",
         torch_dtype=torch_dtype,
         use_cache=(
@@ -221,6 +220,8 @@ def training_function(script_args, training_args):
         # modules_to_save = ["lm_head", "embed_tokens"] # add if you want to use the Llama 3 instruct template
     )
 
+
+
     ################
     # Training
     ################
@@ -228,16 +229,10 @@ def training_function(script_args, training_args):
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        dataset_text_field="text",
         eval_dataset=test_dataset,
         peft_config=peft_config,
-        max_seq_length=script_args.max_seq_length,
-        tokenizer=tokenizer,
-        packing=True,
-        dataset_kwargs={
-            "add_special_tokens": False,  # We template with special tokens
-            "append_concat_token": False,  # No need to add additional separator token
-        },
+        processing_class=tokenizer,
+        
     )
     if trainer.accelerator.is_main_process:
         trainer.model.print_trainable_parameters()
