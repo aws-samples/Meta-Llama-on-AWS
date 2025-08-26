@@ -1,6 +1,6 @@
 fastapi==0.104.1
 uvicorn==0.24.0
-python-multipart==0.0.6
+python-multipart>=0.0.18
 langgraph==0.2.60
 langchain==0.3.10
 langchain-community==0.3.10
