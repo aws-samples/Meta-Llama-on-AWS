@@ -2,10 +2,6 @@
 
 Document analysis application using AWS Bedrock Llama4 Scout on Amazon SageMaker.
 
-## Architecture Overview
-
-![AWS Architecture Diagram](intelligent_document_architecture.png)
-
 ## Components
 
 - **Frontend**: HTML interface with file upload
