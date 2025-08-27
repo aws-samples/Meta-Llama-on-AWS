@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse
 from starlette.requests import Request
 import os
 from document_processor import DocumentProcessor
-from models import ProcessingResponse  # Only import what we're using
+from models import ProcessingResponse
 
 
 app = FastAPI(
