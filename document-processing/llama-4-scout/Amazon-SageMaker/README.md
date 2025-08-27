@@ -4,10 +4,6 @@ Document analysis application using Amazon Bedrock Llama4 Scout on Amazon SageMa
 
 Run the code below in a terminal or use the llama-4-scout-document-processing Jupyter notebook.
 
-## Architecture Overview
-
-![AWS Architecture Diagram](intelligent_document_architecture.png)
-
 ## Components
 
 - **Frontend**: HTML interface with file upload
@@ -148,5 +144,6 @@ See `requirements.txt` for complete list. Key dependencies:
 - jinja2
 
 ---
+
 
 **Amazon Bedrock + SageMaker Document Processing**
