@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Intelligent Document Processor</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            margin-top: 30px;
+        }
+        .upload-form {
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 5px;
+        }
+        .btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>Intelligent Document Processing</h1>
+    <p>Extract insights and structured data from documents using Llama4 Scout and LangGraph</p>
+    
+    <div class="container">
+        <div class="upload-form">
+            <h2>Upload Document</h2>
+            <p>Upload a PDF, DOCX, TXT, or MD file to process:</p>
+            
+            <form id="documentForm" enctype="multipart/form-data">
+                <input type="file" id="documentFile" name="file" accept=".pdf,.docx,.txt,.md" required>
+                <br><br>
+                
+                <!-- Advanced options toggle -->
+                <details style="margin-bottom: 15px;">
+                    <summary style="cursor: pointer; color: #666;">Advanced Settings</summary>
+                    <div style="margin-top: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                        <label for="customApiUrl">API URL:</label>
+                        <input type="text" id="customApiUrl" placeholder="http://localhost:8001" style="width: 100%; padding: 5px; margin-bottom: 10px;">
+                        <p style="color: #666; font-size: 12px;">
+                            Set a custom API URL if the auto-detection fails. Options to try:
+                            <br>• Direct connection: <code>http://localhost:8001</code>
+                            <br>• JupyterHub proxy: <code>http://your-jupyter-url/proxy/8001</code>
+                            <br>• SageMaker: <code>https://your-sagemaker-domain/proxy/8001</code>
+                        </p>
+                    </div>
+                </details>
+                
+                <input type="hidden" id="apiUrl" value="">
+                <button type="submit" class="btn">Process Document</button>
+            </form>
+        </div>
+        
+        <div id="results" style="margin-top: 20px; display: none;">
+            <h2>Results</h2>
+            <pre id="resultContent" style="background: #f5f5f5; padding: 15px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word;"></pre>
+        </div>
+    </div>
+
+    <script>
+        // Initialize the custom API URL field if we're on SageMaker
+        document.addEventListener('DOMContentLoaded', function() {
+            // Always ensure advanced settings are hidden by default
+            document.querySelector('details').removeAttribute('open');
+            
+            if (window.location.href.includes('.sagemaker.aws/proxy/8001')) {
+                const currentPath = window.location.pathname;
+                const suggestedUrl = `${window.location.origin}${currentPath}${currentPath.endsWith('/') ? '' : '/'}process-document`;
+                document.getElementById('customApiUrl').value = suggestedUrl;
+                // Do not automatically open advanced settings
+            }
+        });
+        
+        document.getElementById('documentForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            const fileInput = document.getElementById('documentFile');
+            
+            if (fileInput.files.length === 0) {
+                alert('Please select a file to upload');
+                return;
+            }
+            
+            formData.append('file', fileInput.files[0]);
+            
+            try {
+                // Check if custom API URL is provided
+                const customApiUrl = document.getElementById('customApiUrl').value.trim();
+                
+                let apiBaseUrl;
+                if (customApiUrl) {
+                    // Use custom API URL if provided
+                    apiBaseUrl = customApiUrl.replace(/\/+$/, ''); // Remove trailing slashes
+                    console.log('Using custom API URL:', apiBaseUrl);
+                } else {
+                    // Auto-detect if running in Jupyter environment - improved detection with SageMaker support
+                    let jupyterBaseUrl = '';
+                    const currentUrl = window.location.href;
+                    
+                    // Special case for SageMaker
+                    if (currentUrl.includes('.sagemaker.aws/proxy/8001')) {
+                        // For SageMaker, we should use the same URL for API calls
+                        const urlParts = currentUrl.split('/proxy/8001');
+                        jupyterBaseUrl = urlParts[0];
+                        console.log('Detected SageMaker environment:', jupyterBaseUrl);
+                    }
+                    // Standard Jupyter detection
+                    else if (currentUrl.includes('/notebooks/')) {
+                        jupyterBaseUrl = currentUrl.split('/notebooks/')[0];
+                    } else if (currentUrl.includes('/lab/')) {
+                        jupyterBaseUrl = currentUrl.split('/lab/')[0];
+                    } else if (currentUrl.includes('/voila/')) {
+                        jupyterBaseUrl = currentUrl.split('/voila/')[0];
+                    }
+                    
+                    apiBaseUrl = jupyterBaseUrl || 'http://localhost:8001';
+                    console.log('Auto-detected API URL:', apiBaseUrl);
+                }
+                
+                // Store the API URL for debugging - fix for double slash issue
+                let apiUrl;
+                
+                // Special handling for SageMaker URL
+                if (window.location.href.includes('.sagemaker.aws/proxy/8001')) {
+                    // For SageMaker, construct URL to match the current path
+                    const currentPath = window.location.pathname;
+                    if (currentPath.endsWith('/proxy/8001/') || currentPath.endsWith('/proxy/8001')) {
+                        // We're at the root of the proxied app
+                        apiUrl = `${window.location.origin}${currentPath}${currentPath.endsWith('/') ? '' : '/'}process-document`;
+                    } else {
+                        // Try to navigate to the correct endpoint
+                        apiUrl = `${window.location.origin}/proxy/8001/process-document`;
+                    }
+                    console.log('SageMaker URL construction:', apiUrl);
+                }
+                // Standard Jupyter proxy URLs
+                else if (apiBaseUrl.includes('/proxy/8001')) {
+                    // For Jupyter proxy URLs, use a different format
+                    apiUrl = `${apiBaseUrl.replace('/proxy/8001', '')}/proxy/8001/process-document`;
+                } else {
+                    // Normal URL construction
+                    apiUrl = `${apiBaseUrl}${apiBaseUrl.endsWith('/') ? '' : '/'}process-document`;
+                }
+                document.getElementById('apiUrl').value = apiUrl;
+                console.log('Full API endpoint:', apiUrl);
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    body: formData,
+                });
+                
+                // Display loading message
+                document.getElementById('resultContent').textContent = 'Processing document...';
+                document.getElementById('results').style.display = 'block';
+                
+                // Check content type before parsing as JSON
+                const contentType = response.headers.get('content-type');
+                let result;
+                if (contentType && contentType.includes('application/json')) {
+                    result = await response.json();
+                } else {
+                    // Handle non-JSON responses
+                    const text = await response.text();
+                    throw new Error(`Server returned non-JSON response: ${text.substring(0, 100)}...`);
+                }
+                
+                if (response.ok) {
+                    document.getElementById('resultContent').textContent = JSON.stringify(result, null, 2);
+                } else {
+                    document.getElementById('resultContent').textContent = 
+                        `Error: ${result.detail || 'Unknown error'}\n` +
+                        `Status: ${response.status}\n` +
+                        `Check server logs for more details.`;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                
+                // Debug information to help troubleshoot
+                const debugInfo = {
+                    url: window.location.href,
+                    apiUrl: document.getElementById('apiUrl').value || 'Not set',
+                    errorMessage: error.message,
+                    errorType: error.name,
+                    timestamp: new Date().toISOString()
+                };
+                console.log('Debug info:', debugInfo);
+                
+                document.getElementById('resultContent').textContent = 
+                    `Client error: ${error.message}\n\n` +
+                    `Debug info:\n` +
+                    `- Browser URL: ${debugInfo.url}\n` +
+                    `- API URL attempted: ${debugInfo.apiUrl}\n` +
+                    `- Error type: ${debugInfo.errorType}\n` +
+                    `- Time: ${debugInfo.timestamp}\n\n` +
+                    `Possible causes:\n` +
+                    `- Server is not running\n` +
+                    `- Network connection issue\n` +
+                    `- AWS Bedrock permissions\n` +
+                    `- LLM provider configuration\n` +
+                    `- Jupyter proxy not configured properly\n\n` +
+                    `Please check server logs for details.`;
+                document.getElementById('results').style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>

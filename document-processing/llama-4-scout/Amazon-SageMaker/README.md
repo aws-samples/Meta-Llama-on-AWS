@@ -1,6 +1,8 @@
 # Intelligent Document Processor
 
-Document analysis application using AWS Bedrock Llama4 Scout on Amazon SageMaker.
+Document analysis application using Amazon Bedrock Llama4 Scout on Amazon SageMaker.
+
+Run the code below in a terminal or use the llama-4-scout-document-processing Jupyter notebook.
 
 ## Architecture Overview
 
@@ -10,7 +12,7 @@ Document analysis application using AWS Bedrock Llama4 Scout on Amazon SageMaker
 
 - **Frontend**: HTML interface with file upload
 - **Backend**: FastAPI application
-- **AI Model**: AWS Bedrock Llama4 Scout via inference profile
+- **AI Model**: Amazon Bedrock Llama4 Scout via inference profile
 - **Infrastructure**: SageMaker notebook instance
 - **Processing**: Document parsing with text chunking
 - **PDF Engine**: pdfplumber for PDF text extraction
@@ -62,7 +64,7 @@ Replace `YOUR-NOTEBOOK-NAME` with your SageMaker notebook instance name.
 
 - **Frontend**: HTML template served by FastAPI
 - **Backend**: FastAPI on port 8001
-- **AI**: AWS Bedrock Llama4 Scout
+- **AI**: Amazon Bedrock Llama4 Scout
 - **Processing**: Text chunking for large documents (20KB chunks)
 - **PDF Processing**: pdfplumber library
 - **Supported Formats**: PDF, DOCX, TXT, MD
@@ -147,4 +149,4 @@ See `requirements.txt` for complete list. Key dependencies:
 
 ---
 
-**AWS Bedrock + SageMaker Document Processing**
+**Amazon Bedrock + SageMaker Document Processing**

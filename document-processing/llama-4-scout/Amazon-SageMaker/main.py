@@ -1,13 +1,11 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from starlette.requests import Request
 import os
 from document_processor import DocumentProcessor
-from models import ProcessingRequest, ProcessingResponse
+from models import ProcessingResponse  # Only import what we're using
 
 
 app = FastAPI(
