@@ -14,13 +14,15 @@ learning_rate: 0.0002
 # learning rate scheduler
 lr_scheduler_type: "constant" 
 # number of training epochs
-num_train_epochs: 3 
+num_train_epochs: 1
+# max training steps (overrides epochs)
+max_steps: 100 
 # batch size per device during training
-per_device_train_batch_size: 4 #We used 4 and 8, Please refer to the below table.
+per_device_train_batch_size: 8 #We used 4 and 8, Please refer to the below table.
 # batch size for evaluation
-per_device_eval_batch_size: 4 #We used 4 and 8, Please refer to the below table.
+per_device_eval_batch_size: 8 #We used 4 and 8, Please refer to the below table.
 # number of steps before performing a backward/update pass
-gradient_accumulation_steps: 2 
+gradient_accumulation_steps: 1 
 # use torch adamw optimizer
 optim: adamw_torch 
 # log every 10 steps
@@ -28,7 +30,7 @@ logging_steps: 10
 # save checkpoint every epoch
 save_strategy: epoch 
 # evaluate every epoch
-evaluation_strategy: epoch 
+eval_strategy: epoch 
 # max gradient norm
 max_grad_norm: 0.3 
 # warmup ratio
@@ -37,8 +39,8 @@ warmup_ratio: 0.03
 bf16: true 
 # use tf32 precision
 tf32: true 
-# use gradient checkpointing to save memory
-gradient_checkpointing: true 
+# use gradient checkpointing to save memory - disabled for FSDP optimization
+gradient_checkpointing: false 
 
 # FSDP parameters: https://huggingface.co/docs/transformers/main/en/fsdp
 fsdp: "full_shard auto_wrap offload" 
@@ -47,3 +49,4 @@ fsdp_config:
   forward_prefetch: "false"
   use_orig_params: "false"
   cpu_ram_efficient_loading: "true"
+  activation_checkpointing: "true"
