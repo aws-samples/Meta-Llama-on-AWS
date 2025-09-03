@@ -1,4 +1,4 @@
-transformers==4.52.1
+transformers==4.53.0
 datasets
 accelerate
 evaluate

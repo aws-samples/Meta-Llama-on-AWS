@@ -5,7 +5,10 @@ import random
 import torch
 from datasets import load_dataset
 from transformers import AutoTokenizer, TrainingArguments
-from trl.commands.cli_utils import  TrlParser
+try:
+    from trl.commands.cli_utils import TrlParser
+except ImportError:
+    from trl import TrlParser
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -108,6 +111,9 @@ def training_function(script_args, training_args):
     
     if training_args.gradient_checkpointing:
         model.gradient_checkpointing_enable()
+    
+    # Set tokenizer for the model
+    model.config.pad_token_id = tokenizer.pad_token_id
 
     ################
     # PEFT
@@ -130,16 +136,9 @@ def training_function(script_args, training_args):
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        dataset_text_field="text",
         eval_dataset=test_dataset,
         peft_config=peft_config,
-        max_seq_length=script_args.max_seq_length,
-        tokenizer=tokenizer,
-        packing=True,
-        dataset_kwargs={
-            "add_special_tokens": False,  
-            "append_concat_token": False,  
-        },
+        formatting_func=lambda x: x["text"],
     )
     if trainer.accelerator.is_main_process:
         trainer.model.print_trainable_parameters()
@@ -174,7 +173,7 @@ def training_function(script_args, training_args):
 
 if __name__ == "__main__":
     parser = TrlParser((ScriptArguments, TrainingArguments))
-    script_args, training_args = parser.parse_args_and_config()
+    script_args, training_args = parser.parse_args_and_config(fail_with_unknown_args=False)
 
     # set use reentrant to False
     if training_args.gradient_checkpointing:

@@ -112,7 +112,7 @@ def upload_analysis_results(results: str, s3_video_path: str) -> str:
         return f"Error saving results: {str(e)}"
 
 # ----------------- FACTORY FUNC -----------------
-def new_llama4_coordinator_agent() -> Agent:
+def llama4_coordinator_agent() -> Agent:
     """
     Factory constructor: creates a NEW agent instance with a fresh conversation history.
     Use this per video request for clean isolation.
