@@ -2,8 +2,6 @@ import boto3
 import os
 import cv2
 import ssl
-import io
-from concurrent.futures import ThreadPoolExecutor
 from strands import Agent, tool
 from strands.models import BedrockModel
 import logging
