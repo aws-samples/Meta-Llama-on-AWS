@@ -129,7 +129,7 @@ with gr.Blocks() as demo:
     gr.Markdown("# 🎬 Llama4 Video Analysis Chatbot\nUpload a video file for interactive, step-by-step AI video analysis.")
     gr.Markdown("⚠️ **Note:** Analysis may take several minutes (frame extraction, AI reasoning, and summary generation). Please be patient.")
     
-    chatbot = gr.Chatbot(label="Llama4 Video Analysis Log")
+    chatbot = gr.Chatbot(label="Llama4 Video Analysis Log", type='messages')
     upload = gr.File(
         label="Upload Video File",
         file_types=["video"],
@@ -152,4 +152,4 @@ with gr.Blocks() as demo:
         outputs=[chatbot, status]
     )
 
-demo.queue().launch()
+demo.queue().launch(share=False) 
