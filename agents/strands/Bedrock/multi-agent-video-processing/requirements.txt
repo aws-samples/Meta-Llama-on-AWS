@@ -5,7 +5,8 @@ strands>=0.1.0
 matplotlib>=3.7.0
 numpy>=1.24.0
 urllib3>=2.0.0
-asyncio
-concurrent.futures
-ipython>=8.0.0
-jupyter>=1.0.0
+urllib3
+gradio
+strands-agents==0.1.9
+strands-agents-builder==0.1.4
+strands-agents-tools==0.1.7
