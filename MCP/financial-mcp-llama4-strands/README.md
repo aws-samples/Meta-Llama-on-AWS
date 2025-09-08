@@ -48,8 +48,6 @@ conda activate python311
 
 ### 3. Install Dependencies
 ```bash
-pip install numpy==1.26.4
-
 pip install -r requirements.txt
 ```
 
