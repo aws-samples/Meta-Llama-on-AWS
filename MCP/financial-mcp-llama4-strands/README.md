@@ -49,9 +49,7 @@ conda activate python311
 ### 3. Install Dependencies
 ```bash
 pip install numpy==1.26.4
-pip install gradio==5.43.1 boto3==1.39.13 mcp==1.13.1 strands-agents==1.5.0 strands-agents-tools==0.2.5 fastmcp python-dotenv finnhub-python yahoo-finance-server==0.1.1
 
-# Or alternatively, you may need to install from requirements file:
 pip install -r requirements.txt
 ```
 
