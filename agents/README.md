@@ -1,75 +1,189 @@
-# Instructions for deploying multi-agent video processing solution using AWS Strands and Llama 4
+# 🎬 Multi-Agent Video Processing with Llama 4
 
-## Recipe Overview <a name="overview"></a>
+Processes videos stored in S3 using AI agents to extract frames, analyze content, and generate summaries.
 
-This tutorial shows a step-by-step solution on deploying a multi-agent video processing application on a Gradio UI using AWS Strands and Llama 4. This solution will leverage a llama4_coordinator agent that interacts with other agents to extract frames out of videos, upload the frames to s3 and understand the temporal analysis of each of the extracted frames and summarize it. 
+## 📋 Prerequisites
 
-## 
+- ☁️ AWS Account
+- 🤖 Amazon Bedrock access enabled
+- 🔧 Strands Agents SDK
+- 🐍 Python 3.9+
 
-## Requirements
+## 🚀 Installation
 
-- AWS Strands
-- Python 3.9+
-- An AWS Account with Bedrock Access
+1. **📦 Install Python dependencies:**
+```bash
+pip install -r requirements.txt
+```
 
-## Installation
-1. Clone the Meta-Llama-on-AWS Github Repo
+2. **🔓 Enable Llama 4 models in Bedrock:**
+Go to AWS Console → Bedrock → Model access and enable:
+- `us.meta.llama4-maverick-17b-instruct-v1:0`
+- `us.meta.llama4-scout-17b-instruct-v1:0`
 
-- git clone https://github.com/aws-samples/Meta-Llama-on-AWS.git
-- cd agents/strands/Multi-agent-video-processing-app
+## 🏗️ System Architecture
 
-In terminal install correct dependencies:
-pip install pip boto3==1.39.0 opencv-python==4.11.0.86 strands pillow==11.2.1 urllib3 gradio strands-agents==0.1.9 strands-agents-builder==0.1.4 strands-agents-tools==0.1.7
+```mermaid
+graph TD
+    A[Video in S3] --> B[Coordinator Agent]
+    B --> C[Frame Extraction Agent]
+    C --> D[Extract 5 Key Frames]
+    D --> E[Upload Frames to S3]
+    E --> F[Visual Analysis Agent]
+    F --> G[Analyze Each Frame with Bedrock]
+    G --> H[Temporal Analysis Agent]
+    H --> I[Analyze Frame Sequence]
+    I --> J[Summary Generation Agent]
+    J --> K[Generate Final Summary]
+    
+    style B fill:#e1f5fe
+    style C fill:#f3e5f5
+    style F fill:#e8f5e8
+    style H fill:#fff3e0
+    style J fill:#fce4ec
+```
 
-2. In the gradio_app.py file, add your s3 bucket that you will use to store and process your videos.
+## 💻 Usage
 
-Run the Gradio UI:
+### Option 1: 📓 Jupyter Notebook
 
-python3 gradio_app.py
+1. **🚀 Start Jupyter:**
+```bash
+jupyter notebook agentic_video_processing_with_llama_4.ipynb
+```
 
-This will provide a local URL: http://127.0.0.1:7861 or a public URL like: https://9053c244410d26f679.gradio.live that will allow you to input a solution.
+2. **📤 Upload a video to S3:**
+The notebook uses your default SageMaker S3 bucket: `sagemaker-{region}-{account_id}`
 
-Once you have the gradio app up and running, you can now test your own videos or use sample videos provided in the repo!
+3. **🔧 Run the upload function:**
+```python
+local_video_path = "path/to/your/video.mp4"
+s3_video_uri = upload_to_sagemaker_bucket(local_video_path)
+```
 
-## Detailed Outline for running notebook: 
+4. **⚡ Process the video:**
+```python
+response = llama4_coordinator_agent(f"Process a video from {s3_video_uri}")
+```
 
-In this notebook, you will need to import all the necessary libaries and tools that were created via AWS Strands.
+### Option 2: 🌐 Gradio Web Interface
 
-Once all libraries are imported, you will need to:
-- set your AWS region
-- load videos from the local path
-- upload the video to SageMaker default bucket
+1. **🚀 Start the web app:**
+```bash
+python gradio_app.py
+```
 
-## Agentic Workflow
+2. **🌍 Open browser:** Go to `http://localhost:7860`
 
-To start the agentic workflow, you will leverage the llama4_coordinater_agent, which is designed to manage and automate a multi-step video analyssi workflow using several specialized agents and tools.
+3. **📁 Upload video:** Drag and drop your video file
 
-- llama4_coordinator_agent: orchestrates the workflow
-- s_visual_analysis_agent: analyzes the images and returns it in json
-- c_temporal_analysis_agent: analyzes the temporal sequences in video frames
-- retrieve_json_agent: helps with additional retrieval from s3 to give to temporal analysis agent
-- summary_generation_agent: takes the temporal analysis input and generates summary
+4. **⏳ Wait for processing:** The system will automatically:
+   - 📤 Upload video to S3
+   - 🎞️ Extract frames
+   - 🔍 Analyze content
+   - 📝 Generate summary
 
-## Step-by-step workflow
+## ⚙️ How It Works
 
-**Frame Extraction:**
-It starts by extracting video frames from the specified S3 video using the run_frame_extraction tool.
+### 🤖 Agent Workflow
 
-**Visual Analysis:**
-The agent then takes the location of the extracted frames and performs visual analysis using the run_visual_analysis tool.
+1. **🎯 Coordinator Agent** (Llama 4)
+   - Orchestrates the entire workflow
+   - Calls other agents in sequence
 
-Wait for JSON Output:
-It waits for the visual analysis to complete and store the results as a JSON file in S3.
+2. **🎞️ Frame Extraction Agent** (Llama 4)
+   - Downloads video from S3
+   - Extracts 5 key frames using OpenCV
+   - Uploads frames back to S3
 
-**Fetch Visual Analysis Data:**
-The agent retrieves the JSON analysis file from S3 using the retrieve_json_from_s3 tool.
+3. **👁️ Visual Analysis Agent** (Llama 4)
+   - Downloads each frame
+   - Analyzes visual content using Bedrock vision
+   - Generates descriptions for each frame
 
-**Temporal Reasoning:**
-The retrieved JSON results are input into a temporal reasoning process (using the run_temporal_reasoning tool) which analyzes sequences and changes over time within the video.
+4. **⏰ Temporal Analysis Agent** (Llama 4)
+   - Analyzes sequence of events across frames
+   - Identifies transitions and narrative flow
 
-**Summary Generation:**
-The result of the temporal reasoning step is then used to generate a final summary using the run_summary_generation tool.
+5. **📄 Summary Generation Agent** (Llama 4)
+   - Combines visual and temporal analysis
+   - Creates final video summary
 
-**Upload Final Analysis:**
-Finally, the generated summary is uploaded as a JSON file back to the S3 bucket using the upload_analysis_results tool, and the agent returns the location of the analysis result in S3.
+### 🗂️ S3 Bucket Structure
 
+```
+sagemaker-{region}-{account_id}/
+├── videos/
+│   └── video-name/
+│       ├── video-name.mp4           # 🎬 Original video
+│       ├── video-name_frames_*/     # 🖼️ Extracted frames folder
+│       │   ├── frame_1.jpg
+│       │   ├── frame_2.jpg
+│       │   └── ...
+│       └── analysis_results.json    # 📊 Analysis output
+```
+
+## 🔐 Required AWS Permissions
+
+Your AWS user/role needs these permissions:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "bedrock:InvokeModel",
+                "s3:GetObject",
+                "s3:PutObject",
+                "s3:ListBucket"
+            ],
+            "Resource": [
+                "arn:aws:bedrock:*:*:foundation-model/*",
+                "arn:aws:s3:::sagemaker-*",
+                "arn:aws:s3:::sagemaker-*/*"
+            ]
+        }
+    ]
+}
+```
+
+## 🔧 Troubleshooting
+
+**❌ Error: "Model not found"**
+- Enable the required Llama 4 models in Bedrock console
+- Check if models are available in your region
+
+**❌ Error: "Access denied to S3"**
+- Verify AWS credentials are configured
+- Check S3 permissions for SageMaker bucket
+
+**⚠️ Error: "Throttling"**
+- The system includes automatic retry logic
+- Wait and try again if processing fails
+
+**❌ Error: "Video format not supported"**
+- Supported formats: MP4, AVI, MOV
+- Convert video to MP4 if needed
+
+## 📁 File Structure
+
+```
+├── agentic_video_processing_with_llama_4.ipynb  # 📓 Main notebook
+├── gradio_app.py                                # 🌐 Web interface
+├── requirements.txt                             # 📦 Dependencies
+├── s3_frame_extraction_agent.py                 # 🎞️ Frame extraction
+├── s_visual_analysis_agent.py                   # 👁️ Visual analysis
+├── c_temporal_analysis_agent.py                 # ⏰ Temporal analysis
+├── summary_generation_agent.py                  # 📄 Summary generation
+├── llama4_coordinator_agent.py                  # 🎯 Workflow coordination
+└── retrieve_json.py                             # 🔧 Utility functions
+```
+
+## ⚡ Performance Notes
+
+- ⏱️ Processing time: 2-5 minutes per video
+- 📏 Video size limit: 100MB recommended
+- 🖼️ Frame extraction: Maximum 5 frames per video
+- 🚦 Concurrent processing: Limited to prevent API throttling
