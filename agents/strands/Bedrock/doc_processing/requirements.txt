@@ -1,0 +1,7 @@
+pydantic
+boto3
+pillow
+strands-agents==1.7.1
+strands-agents-tools==0.2.6
+bedrock-agentcore
+bedrock-agentcore-starter-toolkit
