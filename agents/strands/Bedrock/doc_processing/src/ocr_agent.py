@@ -6,8 +6,6 @@ import re
 from strands import Agent, tool
 from pydantic import BaseModel, Field
 from typing import List, Optional, Any
-from cur_convert import convert_currency_to_usd
-import ast
 import json
 import time
 import io
@@ -121,7 +119,6 @@ def ocr(bucket_name, images: List[str]):
             result.append(response['output']['message']['content'][0]['text'])
         
         ocr_response = parse_out(result)
-        #print(ocr_response)
         print("***** OCR - Completed *****")
         return ocr_response
     except Exception as e:

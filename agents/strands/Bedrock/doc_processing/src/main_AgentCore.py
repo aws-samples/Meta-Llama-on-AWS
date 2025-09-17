@@ -89,7 +89,7 @@ def calc_total(expenses):
                 exceptions.append(entry[ek])      
     expenses["TOTAL_DUE_TO_COMPANY"] = total_sum
     expenses["EXCEPTIONS_SUMMARY"] = exceptions
-    if len(expenses["EXCEPTIONS_SUMMARY"]) > 1:
+    if len(expenses["EXCEPTIONS_SUMMARY"]) > 0:
         expenses["COMPLIANT_STATUS"] = "⚠️"
     else:
         expenses["COMPLIANT_STATUS"] = "✅"

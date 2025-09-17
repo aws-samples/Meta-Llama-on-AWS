@@ -1,10 +1,10 @@
 from strands import Agent, tool
 from strands.models import BedrockModel
 import boto3
-from ocr_agent import ocr
-from cur_convert import convert_currency_to_usd
-from policy_checker import policy_compliant_check
-from structured_out import run_final_sum
+from .ocr_agent import ocr
+from .cur_convert import convert_currency_to_usd
+from .policy_checker import policy_compliant_check
+from .structured_out import run_final_sum
 from pydantic import BaseModel, Field
 from typing import List, Optional, Any, Dict
 import os
@@ -84,7 +84,7 @@ def calc_total(expenses):
                 exceptions.append(entry[ek])      
     expenses["TOTAL_DUE_TO_COMPANY"] = total_sum
     expenses["EXCEPTIONS_SUMMARY"] = exceptions
-    if len(expenses["EXCEPTIONS_SUMMARY"]) > 1:
+    if len(expenses["EXCEPTIONS_SUMMARY"]) > 0:
         expenses["COMPLIANT_STATUS"] = "⚠️"
     else:
         expenses["COMPLIANT_STATUS"] = "✅"
@@ -98,11 +98,11 @@ def expense_processor(bucket_name, images, emp_name, emp_num, cost_center, divis
     structured_out = run_final_sum(emp_name, emp_num, cost_center, division, agent_response)
     structured_out_json = structured_out.model_dump()
     structured_out_json_with_total = calc_total(structured_out_json)
-    # Pretty print the entire JSON structure with indentation
-    print(json.dumps(structured_out_json_with_total, indent=4, ensure_ascii=False))
     return structured_out_json_with_total
 
 def run_expense_processor(payload):
+    if type(payload) is str:
+        payload = json.loads(payload)
     images_prefix = payload.get("images_prefix")
     bucket = payload.get("bucket")
     emp_first_name = payload.get("emp_first_name")
@@ -125,7 +125,6 @@ if __name__ == "__main__":
     parser.add_argument("payload", type=str)
     args = parser.parse_args()
     payload = json.loads(args.payload)
-    
     print("**************** Processing Expense Claim with Llama4 Scout and Maverick on Amazon Bedrock with AWS Strands ****************")
     run_expense_processor(payload)
     

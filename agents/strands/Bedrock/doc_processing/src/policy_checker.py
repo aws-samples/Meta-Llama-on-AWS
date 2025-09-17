@@ -87,7 +87,7 @@ def policy_compliant_check(query: str) -> str:
     Validate if the receipt is compliant as per travel policy
     """
     # Format the query for the math agent with clear instructions
-    policy = read_text_from_file(f"{script_dir}/travel_policy.md")
+    policy = read_text_from_file(f"{script_dir}/travel_policy.txt")
     
     formatted_query = f"Please check if the given receipts are compliant as per travel policy: {policy} for {query}"
     try:
