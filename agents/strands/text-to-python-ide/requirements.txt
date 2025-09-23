@@ -1,0 +1,13 @@
+bedrock-agentcore
+sagemaker
+boto3-stubs[sagemaker-runtime]
+boto3
+fastapi
+uvicorn
+python-multipart
+websockets
+pydantic
+openai
+python-dotenv
+strands-agents==1.7.1
+strands-agents-tools==0.2.6
