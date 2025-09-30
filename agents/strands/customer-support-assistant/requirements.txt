@@ -1,0 +1,14 @@
+strands-agents==1.7.0
+strands-agents-tools
+requests
+PyYAML
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+fastmcp
+pydantic
+bedrock-agentcore
+bedrock-agentcore-starter-toolkit
+botocore
+boto3
+ollama

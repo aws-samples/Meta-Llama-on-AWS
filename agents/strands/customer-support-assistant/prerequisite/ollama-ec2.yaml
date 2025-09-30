@@ -1,0 +1,220 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template to create EC2 instance with SSM enabled in a new VPC'
+
+Parameters:
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: g6.4xlarge
+
+  AMIId:
+    Description: AMI ID for the EC2 instance
+    Type: String
+    Default: ami-003b184e823d3e894
+
+  VPCCidr:
+    Description: CIDR block for VPC
+    Type: String
+    Default: 10.0.0.0/16
+
+  PublicSubnetCidr:
+    Description: CIDR block for public subnet
+    Type: String
+    Default: 10.0.1.0/24
+
+Resources:
+  # VPC Resources
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: Ollama-VPC
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Ollama-IGW
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !Ref PublicSubnetCidr
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Ollama-Public-Subnet
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: Ollama-Public-RT
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+
+  # SSM Role Resources
+  SSMInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Path: "/"
+
+  SSMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+        - !Ref SSMInstanceRole
+
+  # Security Group
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for EC2 instance with SSM, SSH, and Ollama
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: Allow SSH access from anywhere
+        - IpProtocol: tcp
+          FromPort: 11434
+          ToPort: 11434
+          CidrIp: 0.0.0.0/0
+          Description: Allow Ollama API access from anywhere
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: Ollama-SG
+
+  # Elastic IP
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: Ollama-EIP
+
+  ElasticIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      EIP: !Ref ElasticIP
+      InstanceId: !Ref EC2Instance
+
+  # EC2 Resources
+  EC2LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: !Ref AMIId
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile:
+          Name: !Ref SSMInstanceProfile
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            SubnetId: !Ref PublicSubnet
+            Groups:
+              - !Ref EC2SecurityGroup
+            AssociatePublicIpAddress: true
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            apt update -y
+            apt install -y python3-pip
+            sleep 60
+            nvidia-ctk runtime configure --runtime=docker
+            sleep 30
+            usermod -aG docker ubuntu
+            systemctl enable docker
+            systemctl start docker
+            systemctl status docker
+            echo "Running docker run with ollama"
+            su - ubuntu -c "docker pull ollama/ollama"
+            su - ubuntu -c "docker run -d --gpus=all -v ollama:/root/.ollama -p 11434:11434 --name ollama --restart always ollama/ollama"
+            echo "Running docker exec with llama3.1:8b"
+            su - ubuntu -c "docker exec ollama ollama pull llama3.1:8b"
+            su - ubuntu -c "curl http://localhost:11434/api/tags"
+            su - ubuntu -c "sudo systemctl restart docker"
+            echo "Done!"
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: ollama_customer_support
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref EC2LaunchTemplate
+        Version: !GetAtt EC2LaunchTemplate.LatestVersionNumber
+      Tags:
+        - Key: Name
+          Value: ollama_customer_support
+
+Outputs:
+  VPCId:
+    Description: VPC ID
+    Value: !Ref VPC
+
+  PublicSubnetId:
+    Description: Public Subnet ID
+    Value: !Ref PublicSubnet
+
+  InstanceId:
+    Description: EC2 Instance ID
+    Value: !Ref EC2Instance
+
+  SSMRole:
+    Description: IAM Role created for SSM
+    Value: !Ref SSMInstanceRole
+
+  SecurityGroup:
+    Description: Security Group ID
+    Value: !Ref EC2SecurityGroup
+
+  PublicIP:
+    Description: Elastic IP Address
+    Value: !Ref ElasticIP
