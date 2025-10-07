@@ -1,29 +1,31 @@
+import argparse
+import ast
+import json
+import os
+import pprint
+import re
+from typing import Any, Dict, List, Optional
+
+import boto3
+from pydantic import BaseModel, Field
 from strands import Agent, tool
 from strands.models import BedrockModel
-import boto3
-from .ocr_agent import ocr
+
 from .cur_convert import convert_currency_to_usd
+from .ocr_agent import ocr
 from .policy_checker import policy_compliant_check
 from .structured_out import run_final_sum
-from pydantic import BaseModel, Field
-from typing import List, Optional, Any, Dict
-import os
-import json
-import re
-import ast
-import argparse
-import pprint
 
 boto_session = boto3.session.Session()
 region = boto_session.region_name
-s3_resource = boto3.resource('s3')
+s3_resource = boto3.resource("s3")
 bedrock_maverick_model = BedrockModel(
     model_id="us.meta.llama4-maverick-17b-instruct-v1:0",
     streaming=False,
-    max_tokens=4096,
-    temperature=0.,
-    top_p=0.1,
-    region=region
+    max_tokens=8192,
+    temperature=0.0,
+    top_p=0.3,
+    region=region,
 )
 
 instruction = """
@@ -39,7 +41,7 @@ Critical Guidelines:
 Sequential Tool Usage: Use one tool at a time and wait for the result before proceeding to the next step.
 Exact Result Usage: Use the exact result from the previous step as input for the next tool. Do not make assumptions or guesses.
 No Simultaneous Tool Calls: Avoid calling multiple tools simultaneously.
-JSON Output: Return a complete, encoded JSON without json or any additional strings.
+JSON Output: Return a complete, encoded JSON without json or any additional strings. NO [...] truncation in arrays.
 Error Handling: Retry a tool up to 3 times in case of errors or failures. Transition directly to providing the final answer after successful tool execution.
 Direct Transition: Move directly to providing the final answer after all tools have been executed.
 
@@ -60,28 +62,62 @@ Decisive: Make decisions based on tool results.
 Efficient: Execute tasks in a sequential and timely manner.
 """
 
+
 def calc_total(expenses):
     keys = ["total", "TOTAL_USD", "total_due", "total_USD"]
     total_sum = 0
-    expenses['Expenses'] = json.loads(expenses['Expenses'])
-    for entry in expenses['Expenses']:
-        del entry["STATUS"]
+
+    # Check if expenses['Expenses'] is already a Python object or a JSON string
+    if isinstance(expenses["Expenses"], str):
+        try:
+            expenses["Expenses"] = json.loads(expenses["Expenses"])
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON: {e}")
+            print(
+                f"Raw expenses data: {expenses['Expenses'][:500]}..."
+            )  # Print first 500 chars for debugging
+            raise
+
+    for entry in expenses["Expenses"]:
+        if "STATUS" in entry:
+            del entry["STATUS"]
         for k in keys:
             if k in entry:
                 if type(entry[k]) is str:
-                    entr_k = float(entry[k].replace("$", "").replace(",", ""))
-                    total_sum += entr_k
+                    # Remove all currency symbols and commas before converting to float
+                    cleaned_value = (
+                        entry[k]
+                        .replace("$", "")
+                        .replace("£", "")
+                        .replace("€", "")
+                        .replace("¥", "")
+                        .replace(",", "")
+                        .strip()
+                    )
+                    try:
+                        entr_k = float(cleaned_value)
+                        total_sum += entr_k
+                    except ValueError as e:
+                        print(
+                            f"Warning: Could not convert '{entry[k]}' to float for field '{k}'. Error: {e}"
+                        )
+                        continue
                 else:
                     total_sum += entry[k]
                 break  # Stop after the first matching key to avoid duplicates
     total_sum = round(total_sum, 2)
-    
-    except_keys = ["compliance_status", "EXCEPTION", "non_compliance_reason", "non_compliant_details"]
+
+    except_keys = [
+        "compliance_status",
+        "EXCEPTION",
+        "non_compliance_reason",
+        "non_compliant_details",
+    ]
     exceptions = []
-    for entry in expenses['Expenses']:
+    for entry in expenses["Expenses"]:
         for ek in except_keys:
             if ek in entry and entry[ek] != "":
-                exceptions.append(entry[ek])      
+                exceptions.append(entry[ek])
     expenses["TOTAL_DUE_TO_COMPANY"] = total_sum
     expenses["EXCEPTIONS_SUMMARY"] = exceptions
     if len(expenses["EXCEPTIONS_SUMMARY"]) > 0:
@@ -89,16 +125,25 @@ def calc_total(expenses):
     else:
         expenses["COMPLIANT_STATUS"] = "✅"
     return expenses
-    
+
+
 def expense_processor(bucket_name, images, emp_name, emp_num, cost_center, division):
-    agent = Agent(model=bedrock_maverick_model, tools=[ocr, convert_currency_to_usd, policy_compliant_check], system_prompt=instruction)
+    agent = Agent(
+        model=bedrock_maverick_model,
+        tools=[ocr, convert_currency_to_usd, policy_compliant_check],
+        system_prompt=instruction,
+    )
     query = f"Extract and process the given invoice or receipts using {bucket_name}, {images}"
     response = agent(query)
-    agent_response = json.dumps(response.message["content"][0]["text"], ensure_ascii=False)
-    structured_out = run_final_sum(emp_name, emp_num, cost_center, division, agent_response)
+    # Get the raw text response from the agent
+    agent_response_text = response.message["content"][0]["text"]
+    structured_out = run_final_sum(
+        emp_name, emp_num, cost_center, division, agent_response_text
+    )
     structured_out_json = structured_out.model_dump()
     structured_out_json_with_total = calc_total(structured_out_json)
     return structured_out_json_with_total
+
 
 def run_expense_processor(payload):
     if type(payload) is str:
@@ -116,15 +161,18 @@ def run_expense_processor(payload):
     for obj in bucket_name.objects.filter(Prefix=images_prefix):
         images.append(obj.key)
     images.pop(0)
-    expenses_claim_report = expense_processor(bucket_name, images, emp_name, emp_num, cost_center, division)
+    expenses_claim_report = expense_processor(
+        bucket_name, images, emp_name, emp_num, cost_center, division
+    )
     return expenses_claim_report
 
-                           
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("payload", type=str)
     args = parser.parse_args()
     payload = json.loads(args.payload)
-    print("**************** Processing Expense Claim with Llama4 Scout and Maverick on Amazon Bedrock with AWS Strands ****************")
+    print(
+        "**************** Processing Expense Claim with Llama4 Scout and Maverick on Amazon Bedrock with AWS Strands ****************"
+    )
     run_expense_processor(payload)
-    
