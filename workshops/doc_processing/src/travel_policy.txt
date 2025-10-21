@@ -1,0 +1,96 @@
+# XYZ Corporate Travel & Expense Policy
+
+## Policy Overview
+**Company:** XYZ Corporate  
+**Effective Date:** January 1, 2024  
+**Policy Version:** 4.1  
+**Next Review:** December 31, 2024  
+**Department:** Finance & Administration
+
+---
+
+## 1. ACCOMMODATION EXPENSES
+
+### Domestic Travel (Within Country)
+| City Tier | Maximum Rate/Night | Approval Level |
+|-----------|-------------------|----------------|
+| Tier 1 Cities (Major Metro) | $220 | Manager |
+| Tier 2 Cities (Regional) | $180 | Manager |
+| Tier 3 Cities (Small Towns) | $140 | Self-Approved |
+
+### International Travel
+| Region | Maximum Rate/Night | Approval Level |
+|--------|-------------------|----------------|
+| North America | $280 | Director |
+| Europe | $320 | Director |
+| Asia-Pacific | $260 | Director |
+| Other Regions | $200 | Director |
+
+**Additional Requirements:**
+- Corporate rate hotels preferred
+- Extended stays (>7 nights): Corporate housing mandatory
+- Weekend stays require business justification
+- Incidentals limit: $75/stay
+
+---
+
+## 2. TRANSPORTATION
+
+### Air Travel Policy
+| Flight Duration | Domestic Class | International Class | Employee Level |
+|----------------|---------------|-------------------|----------------|
+| < 2 hours | Economy | Economy | All Levels |
+| 2-4 hours | Economy | Premium Economy | Manager+ |
+| 4-8 hours | Premium Economy | Business Class | Director+ |
+| > 8 hours | Business Class | Business Class | VP+ |
+
+**Booking Requirements:**
+- Advance booking: 21 days minimum
+- Lowest logical fare required
+- Saturday stay not mandatory
+- Travel insurance required for international
+
+### Ground Transportation
+| Transport Type | Reimbursement Rate | Daily Limit | Notes |
+|---------------|-------------------|-------------|-------|
+| Taxi/Rideshare | Actual cost | $150 | Standard service only |
+| Rental Car | Actual cost | Mid-size max | Compact preferred |
+| Personal Vehicle | $0.67/mile | No limit | IRS standard rate |
+| Public Transit | Actual cost | $50 | Receipts required >$10 |
+| Parking | Actual cost | $30/day | Economy lots preferred |
+
+---
+
+## 3. MEALS & ENTERTAINMENT
+
+### Daily Meal Allowances (Per Diem)
+| Location Type | Breakfast | Lunch | Dinner | Daily Total |
+|--------------|-----------|-------|---------|-------------|
+| **Domestic - Tier 1** | $28 | $42 | $78 | $148 |
+| **Domestic - Tier 2** | $22 | $35 | $65 | $122 |
+| **Domestic - Tier 3** | $18 | $28 | $52 | $98 |
+| **International - High Cost** | $35 | $55 | $95 | $185 |
+| **International - Medium Cost** | $28 | $45 | $75 | $148 |
+| **International - Low Cost** | $20 | $35 | $55 | $110 |
+
+### Business Entertainment
+| Expense Type | Limit per Person | Approval Required | Documentation |
+|-------------|------------------|-------------------|---------------|
+| Client Meals | $200 | VP+ | Attendee list + purpose |
+| Team Building | $85 | Manager | Team roster |
+| Conference Networking | $125 | Director | Event agenda |
+| Holiday Events | $150 | C-Level | Employee list |
+
+**Alcohol Policy:** Maximum 20% of total meal cost, business context required
+
+---
+
+## 4. COMMUNICATION & TECHNOLOGY
+
+### Communication Expenses
+| Service Type | Monthly Limit | Daily Limit | Approval Level |
+|-------------|---------------|-------------|----------------|
+| International Roaming | $250 | $35 | Manager |
+| Wi-Fi (Hotel/Airport) | No limit | $25 | Self-Approved |
+| Conference Calling | $150 | $25 | Self-Approved |
+| Business Center | $200 | $40 | Manager |
