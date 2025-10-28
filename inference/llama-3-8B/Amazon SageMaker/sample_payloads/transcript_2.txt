@@ -1,0 +1,26 @@
+<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+# Call transcript:
+Customer: I'm extremely frustrated! My credit card was declined at the grocery store and I know I have money in my account!
+Agent: I sincerely apologize for the inconvenience. Let me look into this immediately. Can you provide me with the last four digits of your card?
+Customer: It's 4567. This is embarrassing and unacceptable!
+Agent: I completely understand your frustration, Mr. Davis. Let me check your account... I see the issue. There was a security hold placed on your card due to unusual spending patterns detected by our fraud protection system.
+Customer: What unusual patterns? I've been shopping normally!
+Agent: I see several transactions in different states over the past two days - one in California, then Texas, then back to your home state. Our system flagged this as potentially suspicious.
+Customer: Oh... I was on a business trip. I used my card at airports and hotels.
+Agent: That makes perfect sense. I can remove the security hold right now and your card will be active again within 15 minutes. I'll also add a travel note to your account.
+Customer: Okay, but this shouldn't happen again. I travel frequently for work.
+Agent: Absolutely. I'm setting up a permanent travel profile on your account. You can also call us before trips to pre-authorize travel. Would you like me to send you information about our mobile app where you can do this yourself?
+Customer: Yes, that would be helpful. And I want to make sure this hold is completely removed.
+Agent: The hold is removed as of right now, and I'm sending the app information to your registered email. Is there anything else I can help you with today?
+Customer: No, that should do it. Thank you for fixing this quickly.
+Agent: You're welcome, Mr. Davis. Again, I apologize for the inconvenience. Have a great day!
+
+# Instruction
+Read the call transcript above and extract the following information, in JSON. Output ONLY JSON like below then STOP. Do not make more call transcript.
+{
+    'summary': 'string',
+    'sentiment': 'string',
+    'agent_has_pending_todo_task': 'true/false',
+    'case_closed': 'true/false'
+}
+<|eot_id|><|start_header_id|>assistant<|end_header_id|>

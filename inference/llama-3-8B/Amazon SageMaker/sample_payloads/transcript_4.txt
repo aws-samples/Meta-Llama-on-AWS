@@ -1,0 +1,33 @@
+<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+# Call transcript:
+Customer: Hello, I'm calling about my insurance claim. I submitted it three weeks ago and haven't heard anything back.
+Agent: Good afternoon. I apologize for the delay in getting back to you. Can you provide me with your claim number?
+Customer: Yes, it's CLM-2024-789456.
+Agent: Thank you. Let me look that up... I see your claim here for the car accident on March 15th. I show that we're still waiting for the police report and the estimate from the body shop.
+Customer: But I submitted the police report two weeks ago! I faxed it to the number you gave me.
+Agent: Let me check our fax logs... I don't see it in our system. Sometimes faxes can get lost or be unclear. Do you have a copy you could email instead?
+Customer: This is ridiculous. I've been without my car for three weeks, and now you're telling me you lost my paperwork?
+Agent: I sincerely apologize for this frustration. Let me see what I can do to expedite this. If you can email me the police report right now, I can fast-track your claim for processing today.
+Customer: Fine. What's your email address?
+Agent: It's claims.processing@insurancecompany.com. Please put your claim number in the subject line.
+Customer: Okay, I'm sending it now... There, it's sent.
+Agent: Perfect, I received it. Now, about the body shop estimate - do you have that as well?
+Customer: The body shop said they sent it directly to you last week. Let me call them to confirm.
+Agent: Actually, let me check with our estimating department while you're on the line... Yes, I found it. It was filed under a slightly different claim number. I'm correcting that now.
+Customer: So you have everything you need now?
+Agent: Yes, I have both documents. I'm marking your claim as priority for review. You should hear back from our adjuster within 48 hours with a decision.
+Customer: And if it's approved, how long until I get paid?
+Agent: Once approved, payment is typically issued within 3-5 business days. I'm also adding a note about the delays you've experienced.
+Customer: Thank you. I hope this gets resolved quickly.
+Agent: I understand your frustration, and I'm committed to getting this resolved for you. You'll receive an email confirmation of our conversation, and I'll personally follow up if you don't hear back by Friday.
+Customer: I appreciate that. Thank you for your help.
+
+# Instruction
+Read the call transcript above and extract the following information, in JSON. Output ONLY JSON like below then STOP. Do not make more call transcript.
+{
+    'summary': 'string',
+    'sentiment': 'string',
+    'agent_has_pending_todo_task': 'true/false',
+    'case_closed': 'true/false'
+}
+<|eot_id|><|start_header_id|>assistant<|end_header_id|>

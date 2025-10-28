@@ -1,0 +1,30 @@
+<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+# Call transcript:
+Customer: Hi, I'd like to cancel my subscription.
+Agent: Hello! I'm sorry to hear you want to cancel. May I ask what's prompting this decision?
+Customer: I'm just not using the service enough to justify the cost anymore.
+Agent: I understand. Before we proceed with the cancellation, let me see if there are any options that might work better for you. What's your current plan?
+Customer: I have the premium plan for $29.99 a month.
+Agent: I see. We do have a basic plan for $9.99 that might be more suitable if you're using it less frequently. Would that be of interest?
+Customer: What's included in the basic plan?
+Agent: The basic plan includes access to our core features, just with some usage limits. You get 10 hours of streaming per month instead of unlimited, and access to our standard content library.
+Customer: Hmm, that might work. But I'm also concerned about the commitment. Can I switch back if I need to?
+Agent: Absolutely! You can upgrade or downgrade your plan at any time without penalty. Changes take effect on your next billing cycle.
+Customer: That sounds reasonable. Let's try the basic plan for a few months and see how it goes.
+Agent: Perfect! I've switched you to the basic plan effective with your next billing cycle on April 1st. Your new rate will be $9.99 per month.
+Customer: Great. Will I get a confirmation of this change?
+Agent: Yes, you'll receive an email confirmation within the next hour with all the details of your new plan.
+Customer: Thank you for working with me on this instead of just canceling.
+Agent: Of course! We want to find a solution that works for you. Is there anything else I can help you with today?
+Customer: No, that covers it. Thanks again!
+Agent: You're very welcome. Have a wonderful day!
+
+# Instruction
+Read the call transcript above and extract the following information, in JSON. Output ONLY JSON like below then STOP. Do not make more call transcript.
+{
+    'summary': 'string',
+    'sentiment': 'string',
+    'agent_has_pending_todo_task': 'true/false',
+    'case_closed': 'true/false'
+}
+<|eot_id|><|start_header_id|>assistant<|end_header_id|>
