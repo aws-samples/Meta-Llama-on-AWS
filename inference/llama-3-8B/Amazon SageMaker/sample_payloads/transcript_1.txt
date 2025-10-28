@@ -1,0 +1,26 @@
+<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+# Call transcript:
+Customer: Hi, I'm calling about my internet connection. It's been really slow for the past week.
+Agent: Good morning! I'm sorry to hear about the slow internet. Let me help you with that. Can I get your account number please?
+Customer: Sure, it's 789456123.
+Agent: Thank you. I see your account here, Ms. Johnson. Let me run a diagnostic on your line... I can see there's been some congestion in your area due to construction work.
+Customer: Oh, that explains it. When will it be fixed?
+Agent: The construction should be completed by Friday, and we expect speeds to return to normal by then. However, I can offer you a temporary speed boost at no charge until then.
+Customer: That would be great, thank you.
+Agent: Perfect. I've applied the boost to your account. You should see improved speeds within the next hour. Is there anything else I can help you with today?
+Customer: Actually, yes. I've been thinking about upgrading my plan. What options do you have?
+Agent: Excellent! We have several upgrade options. Your current plan is 100 Mbps. We offer 300 Mbps for an additional $15 per month, or our premium 1 Gig plan for $30 more.
+Customer: The 300 Mbps sounds good. Can you set that up?
+Agent: Absolutely! I can process that upgrade right now. The new speed will be active within 24 hours, and the new rate will appear on your next bill.
+Customer: Perfect. Thank you so much for your help.
+Agent: You're very welcome, Ms. Johnson. Have a wonderful day!
+
+# Instruction
+Read the call transcript above and extract the following information, in JSON. Output ONLY JSON like below then STOP. Do not make more call transcript.
+{
+    'summary': 'string',
+    'sentiment': 'string',
+    'agent_has_pending_todo_task': 'true/false',
+    'case_closed': 'true/false'
+}
+<|eot_id|><|start_header_id|>assistant<|end_header_id|>

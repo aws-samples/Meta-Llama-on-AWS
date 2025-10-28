@@ -1,0 +1,30 @@
+<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+# Call transcript:
+Customer: I need help with my online banking. I can't log in and I have an important payment to make today.
+Agent: I'd be happy to help you with your online banking access. Can you tell me what happens when you try to log in?
+Customer: It says my password is incorrect, but I know I'm entering it correctly. I've tried multiple times.
+Agent: That's frustrating. For security purposes, accounts get temporarily locked after several failed login attempts. Let me verify your identity first. Can you provide me with your full name and the last four digits of your social security number?
+Customer: My name is Sarah Mitchell, and the last four digits are 7834.
+Agent: Thank you, Ms. Mitchell. I can see your account has indeed been locked due to multiple failed login attempts. I can unlock it for you right now.
+Customer: Please do. I really need to make this payment today - it's my mortgage and it's due.
+Agent: I understand the urgency. Your account is now unlocked. However, you'll need to reset your password. I can help you do that over the phone, or you can use the "Forgot Password" link on our website.
+Customer: Let's do it over the phone. I don't want to risk getting locked out again.
+Agent: Perfect. I'm sending a temporary verification code to your registered phone number ending in 4567. You should receive it within a minute.
+Customer: Okay, I got it. The code is 892456.
+Agent: Thank you. That's correct. Now, please create a new password. It needs to be at least 8 characters with a mix of letters, numbers, and symbols.
+Customer: Okay, my new password is SecureBank2024!
+Agent: Excellent. Your password has been updated. You should now be able to log in. Try it while I'm on the line to make sure it works.
+Customer: Let me try... Yes! I'm in. Thank you so much. Now I can make my mortgage payment.
+Agent: Wonderful! Is there anything else I can help you with regarding your online banking?
+Customer: No, that's perfect. You've been very helpful. Thank you!
+Agent: You're very welcome, Ms. Mitchell. Have a great day and thank you for banking with us!
+
+# Instruction
+Read the call transcript above and extract the following information, in JSON. Output ONLY JSON like below then STOP. Do not make more call transcript.
+{
+    'summary': 'string',
+    'sentiment': 'string',
+    'agent_has_pending_todo_task': 'true/false',
+    'case_closed': 'true/false'
+}
+<|eot_id|><|start_header_id|>assistant<|end_header_id|>

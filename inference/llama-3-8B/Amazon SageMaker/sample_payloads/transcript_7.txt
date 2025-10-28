@@ -1,0 +1,53 @@
+<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+# Call transcript:
+Customer: Hi, I'm calling about a delivery that was supposed to arrive yesterday but never showed up.
+Agent: I'm sorry to hear about the missed delivery. Let me help you track that down. Can you provide me with your order number?
+Customer: Sure, it's ORD-445789123.
+Agent: Thank you. Let me look that up... I see your order here for the office chair. It shows it was out for delivery yesterday but there was an issue with the delivery attempt.
+Customer: What kind of issue? I was home all day waiting for it.
+Agent: According to the delivery notes, the driver couldn't access the building. It says "Unable to reach customer - building access denied."
+Customer: That's strange. I live in a house, not an apartment building. There shouldn't be any access issues.
+Agent: That does sound odd. Let me check if there might have been an address error... I see the issue. The delivery address shows an apartment number that doesn't match your billing address.
+Customer: I definitely didn't put an apartment number. I live at 123 Oak Street, not an apartment.
+Agent: You're absolutely right. It looks like there was a data entry error on our end. Your package is currently back at the local distribution center. I can have it redelivered today with the correct address.
+Customer: That would be great. What time can I expect it?
+Agent: I'm scheduling it for priority delivery today between 2 PM and 6 PM. The driver will have your correct address and phone number.
+Customer: Perfect. Will I get a tracking update?
+Agent: Yes, you'll receive both an email and text notification when the driver is about 30 minutes away. I'm also applying a $10 credit to your account for the inconvenience.
+Customer: Thank you, I appreciate that. This chair is for my home office and I really need it. Actually, while I have you on the line, I'm having some concerns about the chair itself.
+Agent: Of course, what concerns do you have?
+Customer: Well, I ordered the ergonomic executive chair in black leather, but I'm wondering if it will fit through my office door. The dimensions online seemed a bit unclear.
+Agent: Let me pull up the product specifications... The chair dimensions are 28 inches wide, 30 inches deep, and 45 inches high when fully assembled. What are your doorway dimensions?
+Customer: My door is a standard 32-inch door, so width should be fine. But I'm more worried about getting it up the stairs to my second-floor office.
+Agent: I understand that concern. The chair does come partially disassembled to make it easier to transport. The backrest detaches, and the base can be separated from the seat. Would you like me to include assembly instructions in multiple languages?
+Customer: That would be helpful. Also, I noticed there were some mixed reviews about the assembly process. Some people said it was difficult.
+Agent: You're right to check the reviews. We've actually updated the assembly process since some of those earlier reviews. The new version includes color-coded parts and a QR code that links to a video tutorial.
+Customer: That's good to know. What about the warranty? I want to make sure I'm covered if there are any issues.
+Agent: The chair comes with a 5-year warranty covering manufacturing defects, and a 2-year warranty on the gas cylinder and casters. We also offer a 30-day satisfaction guarantee.
+Customer: What exactly does the satisfaction guarantee cover?
+Agent: If you're not completely satisfied with the chair for any reason within 30 days, you can return it for a full refund. We'll even arrange pickup at no charge to you.
+Customer: That's reassuring. One more thing - I noticed the price has gone up since I ordered it. Will I be charged the new price?
+Agent: No, you'll be charged the price that was active when you placed your order. We honor the original pricing even if there are subsequent price changes.
+Customer: Excellent. Oh, and I should mention - I have a dog who might be curious about the new furniture. Is the leather treated with anything that might be harmful to pets?
+Agent: That's a great question and very responsible of you to ask. The leather is treated with pet-safe finishes, and we use water-based adhesives that are non-toxic. However, I'd still recommend keeping your dog from chewing on it, just for the furniture's longevity.
+Customer: Of course. I just wanted to make sure there weren't any harmful chemicals. Speaking of which, does the chair have any strong odors when it's new?
+Agent: Some customers do notice a slight new furniture smell initially, but it's not chemical-based and typically dissipates within a few days of unpacking. If you're sensitive to odors, you might want to let it air out in a well-ventilated area first.
+Customer: Good to know. I think that covers all my questions about the chair itself. So to confirm, it will definitely be delivered today between 2 and 6 PM?
+Agent: That's correct. I've put a priority flag on your delivery, and I've spoken directly with the local distribution center to ensure they have the correct address. The driver will call you 30 minutes before arrival.
+Customer: Perfect. And you mentioned a $10 credit - will that show up on my next statement?
+Agent: Actually, since this was our error, I'm applying it as a refund to your original payment method. You should see it within 3-5 business days.
+Customer: That's even better. Thank you for going above and beyond to fix this situation.
+Agent: It's my pleasure. We value your business and want to make sure you have a great experience with us. Is there anything else I can help you with today?
+Customer: No, I think that covers everything. You've been incredibly thorough and helpful.
+Agent: Wonderful! You should receive a confirmation email shortly with all the delivery details and the updated address. Have a great day, and enjoy your new office chair!
+Customer: Thank you so much. Have a great day too!
+
+# Instruction
+Read the call transcript above and extract the following information, in JSON. Output ONLY JSON like below then STOP. Do not make more call transcript.
+{
+    'summary': 'string',
+    'sentiment': 'string',
+    'agent_has_pending_todo_task': 'true/false',
+    'case_closed': 'true/false'
+}
+<|eot_id|><|start_header_id|>assistant<|end_header_id|>
