@@ -8,5 +8,5 @@ This a finance agent showcasing capabilities of distilled Llama 8b using LangCha
 
 Start by installing uv.
 
-You can run the agent using:
+You can run the agent using. First time you run it, dependencies would be installed:
 uv run fin-agent.py
