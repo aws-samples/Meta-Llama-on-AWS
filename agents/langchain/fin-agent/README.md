@@ -15,7 +15,7 @@ Follow below steps:
 
 1. Run the agent. Dependencies would be installed if this is the first time running below command:
 ```console
-uv run fin-agent-llama-api.py
+uv run fin-agent-sagemaker.py
 ```
 
 To test MCP server ask the agent: 
