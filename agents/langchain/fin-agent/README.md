@@ -4,9 +4,20 @@
 
 This a finance agent showcasing capabilities of distilled Llama 8b using LangChain framework.
 
-## Installation
+## Installation and running
 
-Start by installing uv.
+Follow below steps:
 
-You can run the agent using. First time you run it, dependencies would be installed:
-uv run fin-agent.py
+1. Install uv
+
+1. Set required environment variables explain on top of the file: 
+`export TAVILY_API_KEY="MY_TAVILY_API_KEY"`
+
+1. Run the agent. Dependencies would be installed if this is the first time running below command:
+```console
+uv run fin-agent-llama-api.py
+```
+
+To test MCP server ask the agent: 
+
+`What is price of coffee today?`
