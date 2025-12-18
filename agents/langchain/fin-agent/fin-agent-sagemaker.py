@@ -2,8 +2,7 @@
 Multi-tool financial agent using LangGraph.
 
 Environment variables:
-    LLAMA_API_KEY - Your Llama API key from https://llama.developer.meta.com/docs/api-keys 
-    LLAMA_BASE_URL - "https://api.llama.com/compat/v1/" is used if not set. See https://llama.developer.meta.com/docs/features/compatibility
+    Set up AWS credentials for SageMaker access, e.g., via ~/.aws/credentials or environment variables.
     TAVILY_API_KEY - Your Tavily API key
     ALPHAVANTAGE_API_KEY - Your AlphaVantage API key
     EDGAR_IDENTITY - Your Edgar AI identity email
