@@ -86,6 +86,7 @@ class LlamaFunctionCallingHandler(ChatModelContentHandler):
             >>> isinstance(payload, bytes)
             True
         """
+        
         # Convert LangChain messages to OpenAI format
         openai_messages = []
         for msg in messages:
@@ -275,6 +276,11 @@ class LlamaFunctionCallingHandler(ChatModelContentHandler):
                 output_bytes = output
             
             response = json.loads(output_bytes.decode("utf-8"))
+            
+            # DEBUG: Print full response structure
+            print(f"\n[CONTENT_HANDLER DEBUG] Full response:")
+            print(json.dumps(response, indent=2)[:1000])
+            
             logger.debug(f"DJL response: {json.dumps(response, indent=2)}")
             
             # Extract the message from the first choice
@@ -291,6 +297,14 @@ class LlamaFunctionCallingHandler(ChatModelContentHandler):
             choice = response["choices"][0]
             message = choice.get("message", {})
             
+            # DEBUG: Print message structure
+            print(f"\n[CONTENT_HANDLER DEBUG] Message structure:")
+            print(f"  - role: {message.get('role')}")
+            print(f"  - content: {str(message.get('content', ''))[:200]}")
+            print(f"  - tool_calls present: {'tool_calls' in message}")
+            if 'tool_calls' in message:
+                print(f"  - tool_calls: {message['tool_calls']}")
+            
             # Extract content
             content = message.get("content", "")
             
@@ -300,11 +314,26 @@ class LlamaFunctionCallingHandler(ChatModelContentHandler):
                 for tc in message["tool_calls"]:
                     function = tc.get("function", {})
                     try:
-                        args = json.loads(function.get("arguments", "{}"))
+                        raw_args_str = function.get("arguments", "{}")
+                        args = json.loads(raw_args_str)
                         
-                        # Fix: Convert string-formatted arrays to actual arrays
-                        # The model sometimes outputs "['item1', 'item2']" instead of ["item1", "item2"]
+                        # DEBUG: Log before type coercion
+                        print(f"\n[TYPE_COERCION DEBUG] Before fix:")
+                        print(f"  Raw arguments string: {raw_args_str}")
+                        print(f"  Parsed args: {args}")
+                        print(f"  Arg types: {[(k, type(v).__name__) for k, v in args.items()]}")
+                        
+                        # Fix: Convert string-formatted types to actual types
+                        # The model sometimes outputs:
+                        # - "['item1', 'item2']" instead of ["item1", "item2"]
+                        # - "true"/"false" instead of true/false
+                        # - "3" instead of 3
                         args = self._fix_string_arrays(args)
+                        
+                        # DEBUG: Log after type coercion
+                        print(f"\n[TYPE_COERCION DEBUG] After fix:")
+                        print(f"  Fixed args: {args}")
+                        print(f"  Arg types: {[(k, type(v).__name__) for k, v in args.items()]}")
                         
                         tool_calls.append({
                             "name": function.get("name"),
@@ -316,6 +345,12 @@ class LlamaFunctionCallingHandler(ChatModelContentHandler):
                         logger.debug(f"Raw arguments: {function.get('arguments')}")
                         # Skip malformed tool calls
                         continue
+            
+            # FALLBACK: Parse tool calls from content if not in tool_calls field
+            # This handles cases where the model generates <tool_call> tags in content
+            if not tool_calls and content:
+                logger.info("No tool_calls in response, attempting to parse from content field")
+                tool_calls = self._parse_tool_calls_from_content(content)
             
             # Create AIMessage
             if tool_calls:
@@ -371,6 +406,110 @@ class LlamaFunctionCallingHandler(ChatModelContentHandler):
             logger.exception("Full exception traceback:")
             raise
     
+    def _parse_tool_calls_from_content(self, content: str) -> List[Dict[str, Any]]:
+        """
+        Fallback parser for tool calls embedded in content field.
+        
+        Some models (like Llama 3.1 8B) generate tool calls in various formats:
+        1. XML-wrapped: <tool_call>{"name": "...", "parameters": {...}}</tool_call>
+        2. Plain JSON: {"name": "...", "parameters": {...}}
+        3. Multiple on separate lines
+        
+        This method extracts and parses these tool calls.
+        
+        Args:
+            content: The content string that may contain tool calls
+            
+        Returns:
+            List of tool call dictionaries in LangChain format
+        """
+        import re
+        
+        tool_calls = []
+        
+        # PATTERN 1: XML-wrapped tool calls <tool_call>...</tool_call>
+        xml_pattern = r'<tool_call>\s*(.*?)\s*</tool_call>'
+        xml_matches = re.findall(xml_pattern, content, re.DOTALL)
+        
+        if xml_matches:
+            logger.info(f"Found {len(xml_matches)} XML-wrapped tool call(s) in content field")
+            
+            for i, match in enumerate(xml_matches):
+                try:
+                    # Parse the JSON inside the tool_call tags
+                    tool_data = json.loads(match)
+                    
+                    # Extract name and parameters/arguments
+                    name = tool_data.get("name")
+                    # Handle both "parameters" and "arguments" keys
+                    args = tool_data.get("parameters") or tool_data.get("arguments") or {}
+                    
+                    if not name:
+                        logger.warning(f"Tool call {i+1} missing 'name' field, skipping")
+                        continue
+                    
+                    # Generate unique call ID
+                    import uuid
+                    call_id = f"call_{uuid.uuid4().hex[:16]}"
+                    
+                    tool_calls.append({
+                        "name": name,
+                        "args": args,
+                        "id": call_id
+                    })
+                    
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse XML-wrapped tool call {i+1}: {e}")
+                    continue
+        
+        # PATTERN 2: Plain JSON tool calls (no XML wrapper)
+        # Look for {"name": "...", "parameters": {...}} or {"name": "...", "arguments": {...}}
+        # This handles cases where model outputs plain JSON without XML tags
+        # Use a more robust approach: find all lines that look like complete JSON objects
+        if not tool_calls:  # Only try this if XML parsing didn't find anything
+            lines = content.split('\n')
+            for line_num, line in enumerate(lines):
+                line = line.strip()
+                # Check if line looks like a JSON object with "name" field
+                if line.startswith('{') and '"name"' in line and ('"parameters"' in line or '"arguments"' in line):
+                    try:
+                        # Try to parse the entire line as JSON
+                        tool_data = json.loads(line)
+                        
+                        # Extract name and parameters/arguments
+                        name = tool_data.get("name")
+                        args = tool_data.get("parameters") or tool_data.get("arguments") or {}
+                        
+                        if not name:
+                            logger.warning(f"Plain JSON tool call on line {line_num+1} missing 'name' field, skipping")
+                            continue
+                        
+                        # Apply type coercion to arguments
+                        args = self._fix_string_arrays(args)
+                        
+                        # Generate unique call ID
+                        import uuid
+                        call_id = f"call_{uuid.uuid4().hex[:16]}"
+                        
+                        tool_calls.append({
+                            "name": name,
+                            "args": args,
+                            "id": call_id
+                        })
+                        
+                        logger.info(f"Parsed plain JSON tool call from line {line_num+1}: {name}({args})")
+                        
+                    except json.JSONDecodeError as e:
+                        logger.debug(f"Failed to parse line {line_num+1} as JSON tool call: {e}")
+                        continue
+        
+        if tool_calls:
+            logger.info(f"Successfully parsed {len(tool_calls)} tool call(s) from content field")
+        else:
+            logger.debug("No tool calls found in content field")
+        
+        return tool_calls
+    
     def _fix_string_arrays(self, args: Dict[str, Any]) -> Dict[str, Any]:
         """
         Fix string-formatted arrays, booleans, and numbers in tool arguments.
@@ -400,9 +539,9 @@ class LlamaFunctionCallingHandler(ChatModelContentHandler):
         fixed_args = {}
         for key, value in args.items():
             if isinstance(value, str):
-                # Check for Python boolean strings
-                if value in ("True", "False"):
-                    converted = value == "True"
+                # Check for boolean strings (both Python and JSON formats)
+                if value in ("True", "False", "true", "false"):
+                    converted = value in ("True", "true")
                     logger.info(f"Converted string boolean '{value}' to actual boolean: {converted}")
                     fixed_args[key] = converted
                     continue

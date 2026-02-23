@@ -26,6 +26,20 @@ import json
 import os
 import time
 from datetime import datetime
+from pathlib import Path
+
+# Try to load .env file if python-dotenv is available
+try:
+    from dotenv import load_dotenv
+    # Look for .env in current directory or parent directories
+    env_path = Path(__file__).parent.parent / '.env'
+    if env_path.exists():
+        load_dotenv(env_path)
+        print(f"✅ Loaded environment variables from {env_path}")
+    else:
+        load_dotenv()  # Try current directory
+except ImportError:
+    pass  # python-dotenv not installed, rely on environment variables
 
 # Configuration
 AWS_REGION = "us-west-2"
@@ -43,36 +57,47 @@ HF_MODEL_ID = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 INSTANCE_TYPE = "ml.g5.2xlarge"
 INSTANCE_COUNT = 1
 
-# Get HuggingFace token from environment
-HF_TOKEN = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
 
-if not HF_TOKEN:
-    raise ValueError(
-        "HuggingFace token not found! Please set one of these environment variables:\n"
-        "  export HF_TOKEN='your_token_here'\n"
-        "  export HUGGING_FACE_HUB_TOKEN='your_token_here'\n"
-        "\nGet your token from: https://huggingface.co/settings/tokens"
-    )
+def get_hf_token():
+    """Get HuggingFace token from environment, only when needed."""
+    hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+    
+    if not hf_token:
+        raise ValueError(
+            "HuggingFace token not found! Please set one of these environment variables:\n"
+            "  export HF_TOKEN='your_token_here'\n"
+            "  export HUGGING_FACE_HUB_TOKEN='your_token_here'\n"
+            "\nOr add to .env file:\n"
+            "  HF_TOKEN=your_token_here\n"
+            "\nGet your token from: https://huggingface.co/settings/tokens"
+        )
+    
+    return hf_token
 
-# LMI Environment Variables for Tool Calling
-MODEL_ENV = {
-    # Model Configuration
-    "HF_MODEL_ID": HF_MODEL_ID,
-    "HF_TOKEN": HF_TOKEN,
-    
-    # Tool Calling Configuration (CRITICAL for agent workflows)
-    "OPTION_ROLLING_BATCH": "vllm",  # Use vLLM backend for tool calling
-    "OPTION_ENABLE_AUTO_TOOL_CHOICE": "true",  # Enable automatic tool calling
-    "OPTION_TOOL_CALL_PARSER": "llama3_json",  # Use Llama 3 JSON parser
-    
-    # Performance Configuration
-    "OPTION_MAX_ROLLING_BATCH_SIZE": "32",  # Max concurrent requests
-    "OPTION_MAX_MODEL_LEN": "8192",  # Max sequence length
-    "OPTION_DTYPE": "fp16",  # Use FP16 for faster inference
-    
-    # GPU Configuration
-    "TENSOR_PARALLEL_DEGREE": "1",  # Single GPU
-}
+
+def get_model_env():
+    """Build LMI environment variables with HF token."""
+    return {
+        # Model Configuration
+        "HF_MODEL_ID": HF_MODEL_ID,
+        "HF_TOKEN": get_hf_token(),
+        
+        # Tool Calling Configuration (CRITICAL for agent workflows)
+        # Note: Parallel tool calling is configured at the REQUEST level via the
+        # parallel_tool_calls parameter in the payload, not at the server level.
+        # The content handler sets this parameter when tools are present.
+        "OPTION_ROLLING_BATCH": "vllm",  # Use vLLM backend for tool calling
+        "OPTION_ENABLE_AUTO_TOOL_CHOICE": "true",  # Enable automatic tool calling
+        "OPTION_TOOL_CALL_PARSER": "llama3_json",  # Use Llama 3 JSON parser
+        
+        # Performance Configuration
+        "OPTION_MAX_ROLLING_BATCH_SIZE": "32",  # Max concurrent requests
+        "OPTION_MAX_MODEL_LEN": "8192",  # Max sequence length
+        "OPTION_DTYPE": "fp16",  # Use FP16 for faster inference
+        
+        # GPU Configuration
+        "TENSOR_PARALLEL_DEGREE": "1",  # Single GPU
+    }
 
 
 def print_separator(title="", char="="):
@@ -87,6 +112,8 @@ def print_separator(title="", char="="):
 
 def get_or_create_sagemaker_role():
     """Get or create SageMaker execution role."""
+    from botocore.exceptions import ClientError
+    
     iam_client = boto3.client('iam', region_name=AWS_REGION)
     
     print("🔍 Looking for SageMaker execution role...")
@@ -103,8 +130,10 @@ def get_or_create_sagemaker_role():
             role_arn = response['Role']['Arn']
             print(f"✅ Found existing role: {role_arn}")
             return role_arn
-        except iam_client.exceptions.NoSuchEntityException:
-            continue
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchEntity':
+                continue
+            raise
     
     print("📝 Creating new SageMaker execution role...")
     
@@ -155,6 +184,8 @@ def get_or_create_sagemaker_role():
 
 def check_endpoint_exists(sagemaker_client, endpoint_name):
     """Check if endpoint already exists."""
+    from botocore.exceptions import ClientError
+    
     try:
         response = sagemaker_client.describe_endpoint(EndpointName=endpoint_name)
         status = response['EndpointStatus']
@@ -169,7 +200,7 @@ def check_endpoint_exists(sagemaker_client, endpoint_name):
         else:
             print(f"❌ Endpoint is in {status} state. Please delete it first.")
             return False
-    except sagemaker_client.exceptions.ClientError as e:
+    except ClientError as e:
         if 'Could not find endpoint' in str(e):
             return None
         raise
@@ -235,7 +266,7 @@ def deploy_model():
             ModelName=model_name,
             PrimaryContainer={
                 'Image': LMI_IMAGE,
-                'Environment': MODEL_ENV,
+                'Environment': get_model_env(),  # Get env with token at runtime
                 'Mode': 'SingleModel'
             },
             ExecutionRoleArn=execution_role,

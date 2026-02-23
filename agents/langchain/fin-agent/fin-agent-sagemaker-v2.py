@@ -35,6 +35,20 @@ import json
 import os
 import traceback
 from typing import Annotated, Any, Dict, List, TypedDict
+from pathlib import Path
+
+# Try to load .env file if python-dotenv is available
+try:
+    from dotenv import load_dotenv
+    # Look for .env in current directory
+    env_path = Path(__file__).parent / '.env'
+    if env_path.exists():
+        load_dotenv(env_path)
+        print(f"✅ Loaded environment variables from {env_path}")
+    else:
+        load_dotenv()  # Try current directory
+except ImportError:
+    pass  # python-dotenv not installed, rely on environment variables
 
 import boto3
 import yfinance as yf
@@ -63,18 +77,28 @@ ALPHAVANTAGE_API_KEY = os.environ.get("ALPHAVANTAGE_API_KEY")
 EDGAR_IDENTITY = os.environ.get("EDGAR_IDENTITY")
 
 # MCP Server Configuration
-MCP_SERVERS = {
-    "alphavantage": {
-        "transport": "streamable_http",
-        "url": f"https://mcp.alphavantage.co/mcp?apikey={ALPHAVANTAGE_API_KEY}",
-    },
-    "edgar": {
+# AlphaVantage MCP uses stdio transport with uvx for reliable connection
+# Edgar MCP uses stdio transport with python module
+MCP_SERVERS = {}
+
+# Add Edgar if identity is configured
+if EDGAR_IDENTITY:
+    MCP_SERVERS["edgar"] = {
         "transport": "stdio",
         "command": "python",
         "args": ["-m", "edgar.ai"],
         "env": {"EDGAR_IDENTITY": EDGAR_IDENTITY},
-    },
-}
+    }
+
+# Add AlphaVantage if API key is configured
+# Uses local server via uvx for reliable stdio transport
+# Provides 80+ tools: technical indicators, fundamentals, economic data
+if ALPHAVANTAGE_API_KEY:
+    MCP_SERVERS["alphavantage"] = {
+        "transport": "stdio",
+        "command": "uvx",
+        "args": ["av-mcp", ALPHAVANTAGE_API_KEY],
+    }
 
 SAGEMAKER_ENDPOINT_NAME = os.environ.get("SAGEMAKER_ENDPOINT_NAME", "llama3-lmi-agent")
 sagemaker_client = boto3.Session().client('sagemaker-runtime')
@@ -297,32 +321,295 @@ def create_agent_node(llm_with_tools, available_tools):
 Available tools:
 {tool_list}
 
-CRITICAL: When calling tools, you MUST use proper JSON types in your arguments.
+⚠️ ⚠️ ⚠️ CRITICAL TOOL SELECTION RULES - READ FIRST ⚠️ ⚠️ ⚠️
 
-JSON Type Rules:
-1. Arrays: Use square brackets with items inside: ["item1", "item2"]
-2. Booleans: Use lowercase true or false (NO quotes)
-3. Integers: Use plain numbers (NO quotes): 4
-4. Strings: Use quotes: "text"
+🚨 BEFORE CALLING ANY TOOL, READ THIS DECISION TREE 🚨
 
-Examples for tools with complex parameters:
-✅ CORRECT:
-{{"identifier": "AAPL", "include": ["profile"], "periods": 4, "annual": true}}
-{{"identifier": "MSFT", "include": ["profile", "financials"], "periods": 8, "annual": false}}
+Step 1: Identify what the user is asking for
+   - Does the query contain words: "price", "stock price", "current price", "market price", "share price"?
+     → YES: Go to Step 2a
+     → NO: Go to Step 2b
 
-❌ WRONG (will cause errors):
-{{"identifier": "AAPL", "include": "profile", "periods": "4", "annual": "true"}}
-{{"identifier": "MSFT", "include": "['profile']", "periods": 4, "annual": "false"}}
+Step 2a: USER WANTS STOCK PRICES
+   ✅ YOU MUST USE: yahoo_stock_price(ticker)
+   ❌ YOU MUST NOT USE: edgar_compare
+   
+   Why? edgar_compare does NOT support price metrics and will FAIL with error:
+   "Input validation error: 'price' is not one of ['revenue', 'net_income', ...]"
+   
+   Examples:
+   - "What is Apple's stock price?" → yahoo_stock_price("AAPL")
+   - "Compare prices for AAPL, MSFT, GOOGL" → yahoo_stock_price("AAPL"), then yahoo_stock_price("MSFT"), then yahoo_stock_price("GOOGL")
+   - "Get current price for Tesla" → yahoo_stock_price("TSLA")
 
-Based on the user's query, decide which tool(s) to use. You can use multiple tools if needed.
-For stock-related queries, prefer Yahoo Finance tools. For general questions, use Tavily search.
-For SEC filings and company data, use Edgar tools. For financial market data, use AlphaVantage tools.
+Step 2b: USER WANTS FINANCIAL METRICS
+   - Does the query ask for: revenue, income, profit, assets, liabilities, equity, cash, margins, growth?
+     → YES: Use edgar_compare with appropriate metrics
+     → NO: Use other tools (yahoo_news, tavily_search, etc.)
+   
+   Examples:
+   - "What is Apple's revenue?" → edgar_compare(["AAPL"], metrics=["revenue"])
+   - "Compare revenue for AAPL and MSFT" → edgar_compare(["AAPL", "MSFT"], metrics=["revenue"])
 
-Provide comprehensive and accurate responses based on the tool results."""
+🔴 CRITICAL: edgar_compare ONLY accepts these metrics:
+   ✅ revenue, net_income, gross_profit, operating_income, assets, liabilities, equity, cash, margins, growth
+   
+🔴 edgar_compare will FAIL with these metrics:
+   ❌ price, stock_price, current_price, market_price, share_price
+   
+   If you use edgar_compare with "price", you will get this error:
+   "Input validation error: 'price' is not one of ['revenue', 'net_income', ...]"
+
+CRITICAL INSTRUCTIONS - YOU MUST FOLLOW THESE:
+
+1. ALWAYS USE FUNCTION CALLING FORMAT
+   - When you need information, you MUST call a tool using the function calling format
+   - NEVER write text descriptions of what tools you would call
+   - NEVER say "I would call tool X" - actually call it using function calling
+   - The system expects tool_calls in your response, not text about tools
+
+2. FUNCTION CALLING FORMAT EXAMPLE:
+   User: "What is Apple's stock price?"
+   
+   YOU MUST RESPOND WITH TOOL CALLS (not text):
+   <tool_call>
+   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "AAPL"}}}}
+   </tool_call>
+   
+   DO NOT respond with text like: "I will call yahoo_stock_price with ticker AAPL"
+   DO NOT respond with: "Let me check the stock price for you"
+   
+   After you receive the tool result, THEN you can provide a text response.
+
+3. MULTI-STEP EXAMPLE:
+   User: "What is Apple's ticker and current price?"
+   
+   Step 1 - Call first tool:
+   <tool_call>
+   {{"name": "get_company_ticker", "arguments": {{"company_name": "Apple"}}}}
+   </tool_call>
+   
+   [System returns: "AAPL"]
+   
+   Step 2 - Call second tool with result:
+   <tool_call>
+   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "AAPL"}}}}
+   </tool_call>
+   
+   [System returns: "$178.50"]
+   
+   Step 3 - Provide final answer:
+   "Apple's stock ticker is AAPL and the current price is $178.50"
+
+3a. CRITICAL - SEQUENTIAL TOOL CALLING ONLY:
+   ⚠️ YOU MUST CALL TOOLS ONE AT A TIME - NO PARALLEL CALLS! ⚠️
+   
+   The system does NOT support calling multiple tools simultaneously.
+   You MUST call ONE tool, wait for the result, then call the next tool.
+   
+   ❌ WRONG - Parallel calls (will cause ERROR):
+   <tool_call>
+   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "AAPL"}}}}
+   </tool_call>
+   <tool_call>
+   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "MSFT"}}}}
+   </tool_call>
+   
+   ✅ CORRECT - Sequential calls:
+   Step 1: Call first tool
+   <tool_call>
+   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "AAPL"}}}}
+   </tool_call>
+   
+   [Wait for result]
+   
+   Step 2: Call second tool
+   <tool_call>
+   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "MSFT"}}}}
+   </tool_call>
+   
+   [Wait for result]
+   
+   Step 3: Synthesize response with both results
+
+4. JSON TYPE RULES (for tool arguments):
+   - Arrays: Use square brackets: ["item1", "item2"]
+   - Booleans: Use lowercase true or false (NO quotes)
+   - Integers: Use plain numbers (NO quotes): 4
+   - Strings: Use quotes: "text"
+
+   ✅ CORRECT:
+   {{"identifier": "AAPL", "include": ["profile"], "periods": 4, "annual": true}}
+   
+   ❌ WRONG:
+   {{"identifier": "AAPL", "include": "profile", "periods": "4", "annual": "true"}}
+
+5. INCOMPLETE TOOL RESULTS - CRITICAL RECOVERY STRATEGY:
+   
+   ALWAYS validate tool results before responding to the user!
+   
+   When you receive a tool result, CHECK:
+   a) Does it contain data for ALL items the user asked about?
+      - User asked for 3 companies → result should have 3 companies
+      - User asked for 5 metrics → result should have 5 metrics
+   
+   b) Does it contain ALL data types the user requested?
+      - User asked for price AND revenue → result should have both
+      - User asked for current AND historical → result should have both
+   
+   c) Is the data complete and not truncated?
+      - Check for "..." or "[truncated]" indicators
+      - Check if data seems cut off mid-sentence
+   
+   If ANY check fails, the result is INCOMPLETE - DO NOT respond yet!
+   
+   RECOVERY STEPS when tool returns incomplete data:
+   
+   Step 1: IDENTIFY what's missing
+   Example: User asked for Apple, Microsoft, Google but only got Apple data
+   Missing: Microsoft, Google
+   
+   Step 2: CALL ALTERNATIVE TOOLS for missing data
+   Call tools ONE AT A TIME (sequential, not parallel):
+   
+   First call:
+   <tool_call>
+   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "MSFT"}}}}
+   </tool_call>
+   
+   [Wait for result, then make next call]
+   
+   Second call:
+   <tool_call>
+   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "GOOGL"}}}}
+   </tool_call>
+   
+   Step 3: SYNTHESIZE complete response
+   Combine data from all tools and provide complete answer
+   
+   TOOL ALTERNATIVES (use when primary tool fails):
+   
+   Stock Price Data:
+   - Primary: yahoo_stock_price(ticker)
+   - Backup: edgar_compare([ticker])
+   - Last resort: tavily_search("ticker stock price")
+   
+   Company Financial Data:
+   - Primary: edgar_compare([ticker])
+   - Backup: yahoo_financials(ticker) if available
+   - Last resort: tavily_search("ticker financials")
+   
+   Multi-Company Comparison:
+   - If edgar_compare([A, B, C]) only returns data for A:
+     → Call yahoo_stock_price(B) and yahoo_stock_price(C)
+     → Combine all results for complete comparison
+   
+   EXAMPLE - Recovering from incomplete result:
+   
+   User: "Compare Apple, Microsoft, and Google stock prices"
+   
+   You call: edgar_compare(["AAPL", "MSFT", "GOOGL"])
+   Result: Only Apple data (price: $178.50)
+   
+   ❌ WRONG - Don't give up:
+   "I only got data for Apple. I need more information for Microsoft and Google."
+   
+   ✅ CORRECT - Recover with alternative tools:
+   Detect: Missing Microsoft and Google
+   Call alternatives:
+   <tool_call>
+   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "MSFT"}}}}
+   </tool_call>
+   <tool_call>
+   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "GOOGL"}}}}
+   </tool_call>
+   
+   [Receive results: MSFT=$420.50, GOOGL=$142.30]
+   
+   Synthesize complete response:
+   "Here's the stock price comparison:
+   - Apple (AAPL): $178.50
+   - Microsoft (MSFT): $420.50
+   - Google (GOOGL): $142.30
+   
+   Microsoft has the highest price, followed by Apple, then Google."
+   
+   NEVER give up after a single incomplete tool result!
+   ALWAYS try alternative tools to complete the user's request!
+
+Remember: ALWAYS use function calling format. NEVER describe what you would do - DO IT."""
 
     def agent(state: AgentState) -> dict:
         messages = [SystemMessage(content=system_prompt)] + state["messages"]
         response = llm_with_tools.invoke(messages)
+        
+        # Debug: Print what the model returned
+        print(f"\n[DEBUG] Agent response type: {type(response)}")
+        print(f"[DEBUG] Has tool_calls: {hasattr(response, 'tool_calls')}")
+        if hasattr(response, 'tool_calls'):
+            print(f"[DEBUG] Tool calls: {response.tool_calls}")
+        if hasattr(response, 'content'):
+            print(f"[DEBUG] Content preview: {str(response.content)[:200]}...")
+        
+        # CRITICAL: Validate and fix tool calls BEFORE returning
+        # This prevents parallel calls from reaching SageMaker
+        if hasattr(response, 'tool_calls') and response.tool_calls:
+            fixed_calls = []
+            needs_fixing = False
+            
+            for tool_call in response.tool_calls:
+                tool_name = tool_call.get("name")
+                tool_args = tool_call.get("args", {})
+                
+                # Check for invalid edgar_compare with price metrics
+                if tool_name == "edgar_compare":
+                    metrics = tool_args.get("metrics", [])
+                    identifiers = tool_args.get("identifiers", [])
+                    
+                    # Check if any price-related metric is in the list
+                    price_metrics = {"price", "stock_price", "current_price", "market_price", "share_price"}
+                    has_price = any(m.lower() in price_metrics for m in metrics)
+                    
+                    if has_price:
+                        needs_fixing = True
+                        print(f"\n⚠️  VALIDATION: Detected invalid edgar_compare call with price metrics")
+                        print(f"   Metrics: {metrics}")
+                        print(f"   Identifiers: {identifiers}")
+                        print(f"   🔧 Converting to yahoo_stock_price calls...")
+                        
+                        # Create yahoo_stock_price calls for each identifier
+                        for identifier in identifiers:
+                            fixed_call = {
+                                "name": "yahoo_stock_price",
+                                "args": {"ticker": identifier},
+                                "id": f"{tool_call.get('id', 'fixed')}-{identifier}",
+                                "type": "tool_call"
+                            }
+                            fixed_calls.append(fixed_call)
+                            print(f"   ✅ Created: yahoo_stock_price(ticker='{identifier}')")
+                        
+                        continue  # Skip the invalid edgar_compare call
+                
+                # Keep valid tool calls as-is
+                fixed_calls.append(tool_call)
+            
+            # CRITICAL: Ensure only ONE tool call (no parallel calls)
+            if len(fixed_calls) > 1:
+                needs_fixing = True
+                print(f"\n⚠️  VALIDATION: Detected {len(fixed_calls)} parallel tool calls")
+                print(f"   SageMaker endpoint only supports ONE tool call at a time")
+                print(f"   🔧 Keeping only the FIRST tool call: {fixed_calls[0]['name']}")
+                print(f"   ℹ️  Agent will call remaining tools in subsequent turns")
+                fixed_calls = [fixed_calls[0]]  # Keep only the first call
+            
+            if needs_fixing:
+                # Create a new AIMessage with fixed tool calls
+                response = AIMessage(
+                    content=response.content or "",
+                    tool_calls=fixed_calls
+                )
+                print(f"   ✅ Tool calls validated and fixed\n")
+        
         return {"messages": [response]}
 
     return agent
@@ -355,9 +642,9 @@ def create_final_response_node(llm_no_tools):
                 content = msg.content
                 if isinstance(content, list):
                     content = str(content)
-                # Truncate to 500 chars to keep context manageable
-                truncated = content[:500]
-                if len(content) > 500:
+                # Truncate to 3000 chars to preserve financial data tables
+                truncated = content[:3000]
+                if len(content) > 3000:
                     truncated += "..."
                 tool_results.append(truncated)
         
@@ -439,6 +726,86 @@ Provide your revised response:"""
     return reviser
 
 
+def validate_and_fix_tool_calls(state: AgentState) -> dict:
+    """
+    Validate tool calls and fix common errors BEFORE execution.
+    
+    This is a safety layer that catches invalid tool calls that the model
+    makes despite system prompt warnings. Specifically:
+    - Prevents edgar_compare from being called with 'price' metrics
+    - Converts invalid edgar_compare price calls to yahoo_stock_price calls
+    - Ensures only ONE tool call at a time (no parallel calls)
+    """
+    messages = state["messages"]
+    last_message = messages[-1]
+    
+    if not (isinstance(last_message, AIMessage) and last_message.tool_calls):
+        return {"messages": []}  # No tool calls to validate
+    
+    fixed_calls = []
+    needs_fixing = False
+    
+    for tool_call in last_message.tool_calls:
+        tool_name = tool_call.get("name")
+        tool_args = tool_call.get("args", {})
+        
+        # Check for invalid edgar_compare with price metrics
+        if tool_name == "edgar_compare":
+            metrics = tool_args.get("metrics", [])
+            identifiers = tool_args.get("identifiers", [])
+            
+            # Check if any price-related metric is in the list
+            price_metrics = {"price", "stock_price", "current_price", "market_price", "share_price"}
+            has_price = any(m.lower() in price_metrics for m in metrics)
+            
+            if has_price:
+                needs_fixing = True
+                print(f"\n⚠️  VALIDATION: Detected invalid edgar_compare call with price metrics")
+                print(f"   Metrics: {metrics}")
+                print(f"   Identifiers: {identifiers}")
+                print(f"   🔧 Converting to yahoo_stock_price calls...")
+                
+                # Create yahoo_stock_price calls for each identifier
+                for identifier in identifiers:
+                    fixed_call = {
+                        "name": "yahoo_stock_price",
+                        "args": {"ticker": identifier},
+                        "id": f"{tool_call.get('id', 'fixed')}-{identifier}",
+                        "type": "tool_call"
+                    }
+                    fixed_calls.append(fixed_call)
+                    print(f"   ✅ Created: yahoo_stock_price(ticker='{identifier}')")
+                
+                continue  # Skip the invalid edgar_compare call
+        
+        # Keep valid tool calls as-is
+        fixed_calls.append(tool_call)
+    
+    # CRITICAL: Ensure only ONE tool call (no parallel calls)
+    if len(fixed_calls) > 1:
+        needs_fixing = True
+        print(f"\n⚠️  VALIDATION: Detected {len(fixed_calls)} parallel tool calls")
+        print(f"   SageMaker endpoint only supports ONE tool call at a time")
+        print(f"   🔧 Keeping only the FIRST tool call: {fixed_calls[0]['name']}")
+        print(f"   ℹ️  Agent will call remaining tools in subsequent turns")
+        fixed_calls = [fixed_calls[0]]  # Keep only the first call
+    
+    if needs_fixing:
+        # Create a new AIMessage with fixed tool calls
+        fixed_message = AIMessage(
+            content=last_message.content or "",
+            tool_calls=fixed_calls
+        )
+        
+        # Replace the last message
+        new_messages = messages[:-1] + [fixed_message]
+        print(f"   ✅ Tool calls validated and fixed\n")
+        return {"messages": new_messages}
+    
+    # No fixes needed
+    return {"messages": []}
+
+
 def should_continue(state: AgentState) -> str:
     """Determine next step after agent node.
     
@@ -451,22 +818,22 @@ def should_continue(state: AgentState) -> str:
 
     # If last message has tool calls, execute tools
     if isinstance(last_message, AIMessage) and last_message.tool_calls:
-        # Check if this is a repeated tool call (same tool with same args)
-        # This would indicate a loop
         current_calls = [(tc['name'], str(tc['args'])) for tc in last_message.tool_calls]
         
-        # Look for previous tool calls in history
-        previous_calls = []
+        # Count how many times we've seen these exact calls
+        call_count = 0
         for msg in messages[:-1]:  # Exclude last message
             if isinstance(msg, AIMessage) and msg.tool_calls:
-                previous_calls.extend([(tc['name'], str(tc['args'])) for tc in msg.tool_calls])
+                msg_calls = [(tc['name'], str(tc['args'])) for tc in msg.tool_calls]
+                if msg_calls == current_calls:  # Exact match
+                    call_count += 1
         
-        # If we're calling the exact same tool with exact same args, it's a loop
-        if current_calls and all(call in previous_calls for call in current_calls):
-            print(f"[Loop detected: repeated tool calls {[c[0] for c in current_calls]}]")
+        # If we've seen these exact calls 2+ times, it's a loop
+        if call_count >= 2:
+            print(f"[Loop detected: {call_count} repetitions of {[c[0] for c in current_calls]}]")
             return "final_response"
         
-        # Otherwise, allow the tool call (it's making progress)
+        # Execute tools (validation already happened in agent node)
         return "tools"
     
     # No tool calls, generate final response
@@ -699,7 +1066,7 @@ def build_graph(mcp_tools: list, max_revisions: int = 3, shortcut_quality_score:
         region_name=aws_region_name,
         content_handler=content_handler,
         client=sagemaker_client,
-        model_kwargs={"temperature": 0.1, "max_tokens": 512}  # Reasonable token limit
+        model_kwargs={"temperature": 0.1, "max_tokens": 2048}  # Increased for agent workflows with tool calling
     )
 
     # Bind tools using bind_tools method
@@ -712,12 +1079,12 @@ def build_graph(mcp_tools: list, max_revisions: int = 3, shortcut_quality_score:
         region_name=aws_region_name,
         content_handler=LlamaFunctionCallingHandler(),  # New handler instance
         client=sagemaker_client,
-        model_kwargs={"temperature": 0.1, "max_tokens": 512}  # Reasonable token limit
+        model_kwargs={"temperature": 0.1, "max_tokens": 2048}  # Increased for agent workflows with tool calling
     )
     # Don't bind tools to llm_no_tools - this forces text generation
 
     # Create nodes
-    agent_node = create_agent_node(llm_with_tools)
+    agent_node = create_agent_node(llm_with_tools, all_tools)
     tool_node = ToolNode(all_tools)
     final_response_node = create_final_response_node(llm_no_tools)
     reviser_node = create_reviser_node(llm_no_tools)  # Use llm_no_tools for reviser too
@@ -739,7 +1106,7 @@ def build_graph(mcp_tools: list, max_revisions: int = 3, shortcut_quality_score:
     # Add edges
     workflow.add_edge(START, "agent")
     workflow.add_conditional_edges("agent", should_continue)
-    workflow.add_edge("tools", "final_response")  # After tools, force final response (prevents loops)
+    workflow.add_edge("tools", "agent")  # After tools, go back to agent to check if more tools needed
     workflow.add_edge("final_response", END)  # Skip evaluator/reviser - go directly to END
     # Disabled for now due to context length issues:
     # workflow.add_edge("final_response", "reviser")
@@ -770,15 +1137,29 @@ async def run_cli(evaluate_mode: bool = False, max_revisions: int = 0, shortcut_
         graph_filename: Filename for saving the graph visualization
     """
 
-    # exit if any of the required API keys are missing
-    if not ALPHAVANTAGE_API_KEY:
-        raise ValueError("ALPHAVANTAGE_API_KEY environment variable not set")
-    if not EDGAR_IDENTITY:
-        raise ValueError("EDGAR_IDENTITY environment variable not set")
+    # Check required API keys - make AlphaVantage optional for testing
+    missing_keys = []
+    
     if not TAVILY_API_KEY:
-        raise ValueError("TAVILY_API_KEY environment variable not set")
+        missing_keys.append("TAVILY_API_KEY")
     if not SAGEMAKER_ENDPOINT_NAME:
-        raise ValueError("SAGEMAKER_ENDPOINT_NAME environment variable not set. Please create a SageMaker endpoint first.")
+        missing_keys.append("SAGEMAKER_ENDPOINT_NAME")
+    
+    # Optional keys - warn but don't fail
+    optional_missing = []
+    if not ALPHAVANTAGE_API_KEY:
+        optional_missing.append("ALPHAVANTAGE_API_KEY (AlphaVantage MCP tools will be unavailable)")
+    if not EDGAR_IDENTITY:
+        optional_missing.append("EDGAR_IDENTITY (Edgar SEC filing tools will be unavailable)")
+    
+    if missing_keys:
+        raise ValueError(f"Required environment variables not set: {', '.join(missing_keys)}")
+    
+    if optional_missing:
+        print("\n⚠️  Optional API keys not set:")
+        for key in optional_missing:
+            print(f"   - {key}")
+        print("   Agent will run with limited tools.\n")
 
     print("=" * 60)
     print("Financial Research Agent with Reflection (SageMaker v2)")

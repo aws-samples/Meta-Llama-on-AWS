@@ -15,181 +15,92 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from deployment.deploy_endpoint import (
-    deploy_endpoint,
+from deployment.deploy_llama3_lmi import (
+    deploy_model,
     wait_for_endpoint,
-    validate_endpoint,
-    delete_endpoint
+    check_endpoint_exists,
+    get_or_create_sagemaker_role,
+    get_hf_token,
+    get_model_env
 )
 
 
-class TestDeployEndpoint:
-    """Test suite for deploy_endpoint function."""
+class TestGetHfToken:
+    """Test suite for get_hf_token function."""
     
-    def test_deploy_endpoint_requires_role_arn(self):
-        """Test that deploy_endpoint raises ValueError without role_arn."""
-        with pytest.raises(ValueError, match="role_arn is required"):
-            deploy_endpoint(endpoint_name="test-endpoint", role_arn=None)
+    @patch.dict('os.environ', {'HF_TOKEN': 'test_token_123'})
+    def test_get_hf_token_from_hf_token_env(self):
+        """Test getting token from HF_TOKEN environment variable."""
+        token = get_hf_token()
+        assert token == 'test_token_123'
     
-    @patch('deployment.deploy_endpoint.boto3.client')
-    @patch('deployment.deploy_endpoint.wait_for_endpoint')
-    @patch('deployment.deploy_endpoint.validate_endpoint')
-    def test_deploy_endpoint_success(self, mock_validate, mock_wait, mock_boto_client):
-        """Test successful endpoint deployment."""
-        # Setup mocks
-        mock_sagemaker = MagicMock()
-        mock_boto_client.return_value = mock_sagemaker
-        mock_sagemaker.meta.region_name = 'us-west-2'
-        
-        mock_sagemaker.create_model.return_value = {
-            'ModelArn': 'arn:aws:sagemaker:us-west-2:123456789:model/test-model'
-        }
-        mock_sagemaker.create_endpoint_config.return_value = {
-            'EndpointConfigArn': 'arn:aws:sagemaker:us-west-2:123456789:endpoint-config/test-config'
-        }
-        mock_sagemaker.create_endpoint.return_value = {
-            'EndpointArn': 'arn:aws:sagemaker:us-west-2:123456789:endpoint/test-endpoint'
-        }
-        
-        mock_validate.return_value = {"valid": True, "message": "Success"}
-        
-        # Execute
-        result = deploy_endpoint(
-            endpoint_name="test-endpoint",
-            role_arn="arn:aws:iam::123456789:role/TestRole"
-        )
-        
-        # Verify
-        assert result['status'] == 'success'
-        assert result['endpoint_name'] == 'test-endpoint'
-        assert result['region'] == 'us-west-2'
-        assert 'model_name' in result
-        assert 'endpoint_config_name' in result
-        
-        # Verify AWS API calls
-        mock_sagemaker.create_model.assert_called_once()
-        mock_sagemaker.create_endpoint_config.assert_called_once()
-        mock_sagemaker.create_endpoint.assert_called_once()
-        mock_wait.assert_called_once()
-        mock_validate.assert_called_once()
+    @patch.dict('os.environ', {'HUGGING_FACE_HUB_TOKEN': 'test_token_456'}, clear=True)
+    def test_get_hf_token_from_hugging_face_hub_token_env(self):
+        """Test getting token from HUGGING_FACE_HUB_TOKEN environment variable."""
+        token = get_hf_token()
+        assert token == 'test_token_456'
     
-    @patch('deployment.deploy_endpoint.boto3.client')
-    def test_deploy_endpoint_resource_limit_exceeded(self, mock_boto_client):
-        """Test handling of ResourceLimitExceeded error."""
-        mock_sagemaker = MagicMock()
-        mock_boto_client.return_value = mock_sagemaker
-        mock_sagemaker.meta.region_name = 'us-west-2'
-        
-        # Simulate ResourceLimitExceeded error
-        error_response = {
-            'Error': {
-                'Code': 'ResourceLimitExceeded',
-                'Message': 'Instance quota exceeded'
-            }
-        }
-        mock_sagemaker.create_model.side_effect = ClientError(error_response, 'CreateModel')
-        
-        # Execute
-        result = deploy_endpoint(
-            endpoint_name="test-endpoint",
-            role_arn="arn:aws:iam::123456789:role/TestRole"
-        )
-        
-        # Verify
-        assert result['status'] == 'error'
-        assert 'quota exceeded' in result['message'].lower()
+    @patch.dict('os.environ', {}, clear=True)
+    def test_get_hf_token_missing_raises_error(self):
+        """Test that missing token raises ValueError."""
+        with pytest.raises(ValueError, match="HuggingFace token not found"):
+            get_hf_token()
+
+
+class TestGetModelEnv:
+    """Test suite for get_model_env function."""
     
-    @patch('deployment.deploy_endpoint.boto3.client')
-    def test_deploy_endpoint_validation_exception(self, mock_boto_client):
-        """Test handling of ValidationException error."""
-        mock_sagemaker = MagicMock()
-        mock_boto_client.return_value = mock_sagemaker
-        mock_sagemaker.meta.region_name = 'us-west-2'
+    @patch('deployment.deploy_llama3_lmi.get_hf_token')
+    def test_get_model_env_returns_correct_structure(self, mock_get_token):
+        """Test that get_model_env returns correct environment variables."""
+        mock_get_token.return_value = 'test_token'
         
-        # Simulate ValidationException error
-        error_response = {
-            'Error': {
-                'Code': 'ValidationException',
-                'Message': 'Invalid instance type'
-            }
-        }
-        mock_sagemaker.create_model.side_effect = ClientError(error_response, 'CreateModel')
+        env = get_model_env()
         
-        # Execute
-        result = deploy_endpoint(
-            endpoint_name="test-endpoint",
-            role_arn="arn:aws:iam::123456789:role/TestRole"
-        )
-        
-        # Verify
-        assert result['status'] == 'error'
-        assert 'Invalid configuration' in result['message']
+        assert env['HF_MODEL_ID'] == 'meta-llama/Meta-Llama-3.1-8B-Instruct'
+        assert env['HF_TOKEN'] == 'test_token'
+        assert env['OPTION_ROLLING_BATCH'] == 'vllm'
+        assert env['OPTION_ENABLE_AUTO_TOOL_CHOICE'] == 'true'
+        assert env['OPTION_TOOL_CALL_PARSER'] == 'llama3_json'
+        assert env['OPTION_MAX_MODEL_LEN'] == '8192'
+
+
+class TestCheckEndpointExists:
+    """Test suite for check_endpoint_exists function."""
     
-    @patch('deployment.deploy_endpoint.boto3.client')
-    def test_deploy_endpoint_access_denied(self, mock_boto_client):
-        """Test handling of AccessDeniedException error."""
-        mock_sagemaker = MagicMock()
-        mock_boto_client.return_value = mock_sagemaker
-        mock_sagemaker.meta.region_name = 'us-west-2'
+    def test_check_endpoint_exists_returns_true_for_in_service(self):
+        """Test that InService endpoint returns True."""
+        mock_client = MagicMock()
+        mock_client.describe_endpoint.return_value = {'EndpointStatus': 'InService'}
         
-        # Simulate AccessDeniedException error
-        error_response = {
-            'Error': {
-                'Code': 'AccessDeniedException',
-                'Message': 'User not authorized'
-            }
-        }
-        mock_sagemaker.create_model.side_effect = ClientError(error_response, 'CreateModel')
-        
-        # Execute
-        result = deploy_endpoint(
-            endpoint_name="test-endpoint",
-            role_arn="arn:aws:iam::123456789:role/TestRole"
-        )
-        
-        # Verify
-        assert result['status'] == 'error'
-        assert 'IAM permission denied' in result['message']
+        result = check_endpoint_exists(mock_client, 'test-endpoint')
+        assert result is True
     
-    @patch('deployment.deploy_endpoint.boto3.client')
-    @patch('deployment.deploy_endpoint.wait_for_endpoint')
-    @patch('deployment.deploy_endpoint.validate_endpoint')
-    def test_deploy_endpoint_validation_failure(self, mock_validate, mock_wait, mock_boto_client):
-        """Test handling when endpoint validation fails."""
-        # Setup mocks
-        mock_sagemaker = MagicMock()
-        mock_boto_client.return_value = mock_sagemaker
-        mock_sagemaker.meta.region_name = 'us-west-2'
+    def test_check_endpoint_exists_returns_wait_for_creating(self):
+        """Test that Creating endpoint returns 'wait'."""
+        mock_client = MagicMock()
+        mock_client.describe_endpoint.return_value = {'EndpointStatus': 'Creating'}
         
-        mock_sagemaker.create_model.return_value = {'ModelArn': 'arn:test'}
-        mock_sagemaker.create_endpoint_config.return_value = {'EndpointConfigArn': 'arn:test'}
-        mock_sagemaker.create_endpoint.return_value = {'EndpointArn': 'arn:test'}
+        result = check_endpoint_exists(mock_client, 'test-endpoint')
+        assert result == 'wait'
+    
+    def test_check_endpoint_exists_returns_none_for_not_found(self):
+        """Test that non-existent endpoint returns None."""
+        mock_client = MagicMock()
+        error_response = {'Error': {'Code': 'ValidationException', 'Message': 'Could not find endpoint'}}
+        mock_client.describe_endpoint.side_effect = ClientError(error_response, 'DescribeEndpoint')
         
-        mock_validate.return_value = {
-            "valid": False,
-            "message": "Endpoint not responding"
-        }
-        
-        # Execute
-        result = deploy_endpoint(
-            endpoint_name="test-endpoint",
-            role_arn="arn:aws:iam::123456789:role/TestRole"
-        )
-        
-        # Verify
-        assert result['status'] == 'error'
-        assert 'validation failed' in result['message'].lower()
+        result = check_endpoint_exists(mock_client, 'test-endpoint')
+        assert result is None
 
 
 class TestWaitForEndpoint:
     """Test suite for wait_for_endpoint function."""
     
-    @patch('deployment.deploy_endpoint.boto3.client')
-    @patch('deployment.deploy_endpoint.time.sleep')
-    def test_wait_for_endpoint_success(self, mock_sleep, mock_boto_client):
+    @patch('deployment.deploy_llama3_lmi.time.sleep')
+    def test_wait_for_endpoint_success(self, mock_sleep):
         """Test successful wait for endpoint to reach InService."""
         mock_sagemaker = MagicMock()
-        mock_boto_client.return_value = mock_sagemaker
         
         # Simulate endpoint transitioning to InService
         mock_sagemaker.describe_endpoint.side_effect = [
@@ -198,35 +109,17 @@ class TestWaitForEndpoint:
             {'EndpointStatus': 'InService'}
         ]
         
-        # Execute - should not raise
-        wait_for_endpoint("test-endpoint", timeout=300)
+        # Execute - should return endpoint name
+        result = wait_for_endpoint(mock_sagemaker, "test-endpoint")
         
         # Verify
+        assert result == "test-endpoint"
         assert mock_sagemaker.describe_endpoint.call_count == 3
     
-    @patch('deployment.deploy_endpoint.boto3.client')
-    @patch('deployment.deploy_endpoint.time.sleep')
-    @patch('deployment.deploy_endpoint.time.time')
-    def test_wait_for_endpoint_timeout(self, mock_time, mock_sleep, mock_boto_client):
-        """Test timeout when endpoint takes too long."""
-        mock_sagemaker = MagicMock()
-        mock_boto_client.return_value = mock_sagemaker
-        
-        # Simulate time passing
-        mock_time.side_effect = [0, 100, 200, 301]  # Exceeds 300s timeout
-        
-        # Endpoint stays in Creating state
-        mock_sagemaker.describe_endpoint.return_value = {'EndpointStatus': 'Creating'}
-        
-        # Execute - should raise TimeoutError
-        with pytest.raises(TimeoutError, match="did not reach InService"):
-            wait_for_endpoint("test-endpoint", timeout=300)
-    
-    @patch('deployment.deploy_endpoint.boto3.client')
-    def test_wait_for_endpoint_failed_status(self, mock_boto_client):
+    @patch('deployment.deploy_llama3_lmi.time.sleep')
+    def test_wait_for_endpoint_failed_status(self, mock_sleep):
         """Test handling of Failed endpoint status."""
         mock_sagemaker = MagicMock()
-        mock_boto_client.return_value = mock_sagemaker
         
         # Endpoint fails
         mock_sagemaker.describe_endpoint.return_value = {
@@ -234,157 +127,58 @@ class TestWaitForEndpoint:
             'FailureReason': 'Model download failed'
         }
         
-        # Execute - should raise RuntimeError
-        with pytest.raises(RuntimeError, match="failed to create"):
-            wait_for_endpoint("test-endpoint")
-
-
-class TestValidateEndpoint:
-    """Test suite for validate_endpoint function."""
-    
-    @patch('deployment.deploy_endpoint.boto3.client')
-    def test_validate_endpoint_success(self, mock_boto_client):
-        """Test successful endpoint validation."""
-        mock_runtime = MagicMock()
-        mock_boto_client.return_value = mock_runtime
-        
-        # Mock successful response in OpenAI format
-        mock_response = MagicMock()
-        mock_response['Body'].read.return_value = json.dumps({
-            "id": "chatcmpl-123",
-            "object": "chat.completion",
-            "created": 1234567890,
-            "choices": [{
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": "Hello, I am working!"
-                },
-                "finish_reason": "stop"
-            }]
-        }).encode('utf-8')
-        mock_runtime.invoke_endpoint.return_value = mock_response
-        
-        # Execute
-        result = validate_endpoint("test-endpoint")
+        # Execute - should return None
+        result = wait_for_endpoint(mock_sagemaker, "test-endpoint")
         
         # Verify
-        assert result['valid'] is True
-        assert 'functional' in result['message'].lower()
-        assert 'response' in result
-    
-    @patch('deployment.deploy_endpoint.boto3.client')
-    def test_validate_endpoint_invalid_response_structure(self, mock_boto_client):
-        """Test handling of invalid response structure."""
-        mock_runtime = MagicMock()
-        mock_boto_client.return_value = mock_runtime
-        
-        # Mock invalid response (missing choices)
-        mock_response = MagicMock()
-        mock_response['Body'].read.return_value = json.dumps(
-            {'error': 'Invalid'}
-        ).encode('utf-8')
-        mock_runtime.invoke_endpoint.return_value = mock_response
-        
-        # Execute
-        result = validate_endpoint("test-endpoint")
-        
-        # Verify
-        assert result['valid'] is False
-        assert 'choices' in result['message'].lower()
-    
-    @patch('deployment.deploy_endpoint.boto3.client')
-    def test_validate_endpoint_missing_generated_text(self, mock_boto_client):
-        """Test handling of response missing message field."""
-        mock_runtime = MagicMock()
-        mock_boto_client.return_value = mock_runtime
-        
-        # Mock response without message field
-        mock_response = MagicMock()
-        mock_response['Body'].read.return_value = json.dumps({
-            "choices": [{
-                "some_other_field": "value"
-            }]
-        }).encode('utf-8')
-        mock_runtime.invoke_endpoint.return_value = mock_response
-        
-        # Execute
-        result = validate_endpoint("test-endpoint")
-        
-        # Verify
-        assert result['valid'] is False
-        assert 'message' in result['message'].lower()
-    
-    @patch('deployment.deploy_endpoint.boto3.client')
-    def test_validate_endpoint_client_error(self, mock_boto_client):
-        """Test handling of AWS client error during validation."""
-        mock_runtime = MagicMock()
-        mock_boto_client.return_value = mock_runtime
-        
-        # Simulate client error
-        error_response = {
-            'Error': {
-                'Code': 'ModelError',
-                'Message': 'Model failed to load'
-            }
-        }
-        mock_runtime.invoke_endpoint.side_effect = ClientError(error_response, 'InvokeEndpoint')
-        
-        # Execute
-        result = validate_endpoint("test-endpoint")
-        
-        # Verify
-        assert result['valid'] is False
-        assert 'invocation failed' in result['message'].lower()
+        assert result is None
 
 
-class TestDeleteEndpoint:
-    """Test suite for delete_endpoint function."""
+class TestGetOrCreateSagemakerRole:
+    """Test suite for get_or_create_sagemaker_role function."""
     
-    @patch('deployment.deploy_endpoint.boto3.client')
-    def test_delete_endpoint_success(self, mock_boto_client):
-        """Test successful endpoint deletion."""
-        mock_sagemaker = MagicMock()
-        mock_boto_client.return_value = mock_sagemaker
+    @patch('deployment.deploy_llama3_lmi.boto3.client')
+    def test_get_existing_role(self, mock_boto_client):
+        """Test finding an existing SageMaker role."""
+        mock_iam = MagicMock()
+        mock_boto_client.return_value = mock_iam
         
-        # Mock endpoint info
-        mock_sagemaker.describe_endpoint.return_value = {
-            'EndpointConfigName': 'test-config'
-        }
-        mock_sagemaker.describe_endpoint_config.return_value = {
-            'ProductionVariants': [{'ModelName': 'test-model'}]
+        mock_iam.get_role.return_value = {
+            'Role': {'Arn': 'arn:aws:iam::123456789:role/SageMakerExecutionRole'}
         }
         
         # Execute
-        result = delete_endpoint("test-endpoint")
+        role_arn = get_or_create_sagemaker_role()
         
         # Verify
-        assert result['status'] == 'success'
-        mock_sagemaker.delete_endpoint.assert_called_once()
-        mock_sagemaker.delete_endpoint_config.assert_called_once()
-        mock_sagemaker.delete_model.assert_called_once()
+        assert role_arn == 'arn:aws:iam::123456789:role/SageMakerExecutionRole'
+        mock_iam.get_role.assert_called()
     
-    @patch('deployment.deploy_endpoint.boto3.client')
-    def test_delete_endpoint_client_error(self, mock_boto_client):
-        """Test handling of error during deletion."""
-        mock_sagemaker = MagicMock()
-        mock_boto_client.return_value = mock_sagemaker
+    @patch('deployment.deploy_llama3_lmi.boto3.client')
+    @patch('deployment.deploy_llama3_lmi.time.sleep')
+    def test_create_new_role(self, mock_sleep, mock_boto_client):
+        """Test creating a new SageMaker role when none exists."""
+        from botocore.exceptions import ClientError
         
-        # Simulate error
-        error_response = {
-            'Error': {
-                'Code': 'ResourceNotFound',
-                'Message': 'Endpoint not found'
-            }
+        mock_iam = MagicMock()
+        mock_boto_client.return_value = mock_iam
+        
+        # Simulate no existing roles - use real ClientError
+        error_response = {'Error': {'Code': 'NoSuchEntity', 'Message': 'Role not found'}}
+        mock_iam.get_role.side_effect = ClientError(error_response, 'GetRole')
+        
+        # Mock successful role creation
+        mock_iam.create_role.return_value = {
+            'Role': {'Arn': 'arn:aws:iam::123456789:role/SageMakerExecutionRole'}
         }
-        mock_sagemaker.describe_endpoint.side_effect = ClientError(error_response, 'DescribeEndpoint')
         
         # Execute
-        result = delete_endpoint("test-endpoint")
+        role_arn = get_or_create_sagemaker_role()
         
         # Verify
-        assert result['status'] == 'error'
-        assert 'failed' in result['message'].lower()
+        assert role_arn == 'arn:aws:iam::123456789:role/SageMakerExecutionRole'
+        mock_iam.create_role.assert_called_once()
+        mock_iam.attach_role_policy.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -1,28 +1,17 @@
 # SageMaker Llama 3 Function Calling - Financial Agent
 
-Financial agent using Llama 3 8B on AWS SageMaker with parallel tool calling capabilities.
-
-## Features
-
-- **Parallel Tool Calling**: Call up to 5+ tools simultaneously (60-80% fewer API calls)
-- **Multi-Step Reasoning**: Handle complex queries requiring sequential tool calls
-- **LMI Container**: Purpose-built for agent workflows with vLLM backend
-- **LangGraph Integration**: Compatible with existing LangChain patterns
+Financial agent using Llama 3.1 8B on AWS SageMaker with LangGraph for multi-tool workflows.
 
 ## Quick Start
 
 ### 1. Get HuggingFace Token
 
-The deployment requires access to Meta's Llama 3.1 model on HuggingFace:
-
-1. Create a HuggingFace account at https://huggingface.co
-2. Accept the Llama 3.1 license at https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct
-3. Generate an access token at https://huggingface.co/settings/tokens
-4. Set your HuggingFace token as environment variable:
+1. Create account at https://huggingface.co
+2. Accept Llama 3.1 license: https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct
+3. Generate token: https://huggingface.co/settings/tokens
+4. Set environment variable:
    ```bash
    export HF_TOKEN="your_token_here"
-   # or
-   export HUGGING_FACE_HUB_TOKEN="your_token_here"
    ```
 
 ### 2. Deploy SageMaker Endpoint
@@ -38,8 +27,8 @@ Creates endpoint `llama3-lmi-agent` (~5-10 minutes).
 ```bash
 export SAGEMAKER_ENDPOINT_NAME='llama3-lmi-agent'
 export TAVILY_API_KEY='your-tavily-key'
-export ALPHAVANTAGE_API_KEY='your-alphavantage-key'
-export EDGAR_IDENTITY='your-email@example.com'
+export ALPHAVANTAGE_API_KEY='your-alphavantage-key'  # optional
+export EDGAR_IDENTITY='your-email@example.com'        # optional
 ```
 
 ### 4. Run the Agent
@@ -48,77 +37,130 @@ export EDGAR_IDENTITY='your-email@example.com'
 uv run fin-agent-sagemaker-v2.py
 ```
 
-Try: "Compare stock prices for Apple, Microsoft, and Google"
+Try: "What is Apple's stock price?"
 
-The agent calls 3 tools in parallel and synthesizes results.
+## What Works Well ✅
 
-## Performance
+- Simple queries with 1-2 tool calls
+- Single-company stock price lookups
+- Basic financial data retrieval
+- Learning LangGraph agent patterns
 
-- **60-80% fewer API calls** with parallel tool calling
-- **Response time**: 15-48 seconds for complex queries
-- **Capacity**: Up to 20+ sequential tool calls
-- **Success rate**: 100% on tested scenarios
+## Known Limitations ⚠️
+
+**Llama 3.1 8B has fundamental limitations for function calling:**
+
+1. **Inconsistent Tool Calling Format**
+   - Model sometimes generates tool calls in different formats
+   - May fail on complex multi-step queries
+   - Not a bug - this is expected behavior
+
+2. **Context Window Limit (8,192 tokens)**
+   - Agent can make 5-6 tool calls before hitting limit
+   - Complex queries requiring many tools will fail
+
+3. **Sequential Tool Calling Only**
+   - SageMaker endpoint processes one tool at a time
+   - Multi-company comparisons require multiple loops
+
+### Recommendation for Production
+
+**Upgrade to better models:**
+- **Llama 3.3 70B**: Better function calling, 128K context window
+- **GPT-4 or Claude**: Designed specifically for tool use
+- **Amazon Bedrock**: Managed service with Claude 3.5 Sonnet
+
+**This implementation is best for:**
+- Learning agent architectures
+- Testing LangGraph patterns
+- Cost-conscious experimentation
+- Simple demos
 
 ## Configuration
 
-**Instance**: `ml.g5.2xlarge` (1 GPU, 24GB)
-- Cost: ~$1.52/hour (~$243/month for 8hrs/day)
-- Handles: Development and moderate production workloads
+**Instance**: `ml.g5.2xlarge` (1 GPU, 24GB VRAM)
+- Cost: ~$1.52/hour
+- Suitable for: Development and testing
 
 **Environment Variables**:
 - `SAGEMAKER_ENDPOINT_NAME` (required)
-- `TAVILY_API_KEY` (optional - web search)
+- `TAVILY_API_KEY` (required - web search)
 - `ALPHAVANTAGE_API_KEY` (optional - financial data)
 - `EDGAR_IDENTITY` (optional - SEC filings)
 
 ## Testing
 
 ```bash
-# Test parallel tool calling (2-5 tools)
-uv run test_multiple_parallel_tools.py
-
-# Test multi-step reasoning
-uv run test_multi_step_detailed.py
+# Run the agent interactively
+uv run fin-agent-sagemaker-v2.py
 ```
 
-## Key Improvements
+**Example Queries:**
+- "What is Apple's stock price?" ✅
+- "Get news for Microsoft" ✅
+- "Compare Apple and Amazon stock prices" ⚠️ (may require multiple loops)
 
-### Parallel Tool Calling
-- Enabled via `parallel_tool_calls=True` in content handler
-- Reduces API calls by 60-80% for multi-tool queries
-- Single agent invocation handles multiple tools
 
-### Enhanced Response Generation
-- 500 chars per tool result (vs 50 chars before)
-- 512 max tokens (vs 128 before)
-- System message for better response quality
-- Comprehensive synthesis of tool results
+## Architecture
 
-## Important Notes
+- **LangGraph**: Agent workflow orchestration
+- **LangChain**: Tool integration and message handling
+- **SageMaker**: Llama 3.1 8B model hosting
+- **MCP**: Edgar (SEC filings) and AlphaVantage (financial data)
 
-**HuggingFace Token Required**:
-- You need a HuggingFace account and token to deploy the model
-- Accept the Llama 3.1 license before deployment
-- Update the token in `deployment/deploy_llama3_lmi.py` before running
-- Never commit your token to version control
+## Key Features
 
-**Do NOT use quantized models** (AWQ, GPTQ) for tool calling:
-- 4-bit quantized models hallucinate tool results
-- Cannot maintain precision for structured outputs
-- Always use unquantized models for agents
+- Multi-tool financial research
+- Sequential tool execution with validation
+- Automatic error handling and recovery
+- Support for Yahoo Finance, Tavily, Edgar, and AlphaVantage
 
-**Cost optimization**:
-- Delete unused endpoints when not in use
-- Use auto-scaling for variable workloads
-- Monitor usage with CloudWatch alarms
+## Files
 
-## Resources
+- `fin-agent-sagemaker-v2.py` - Main agent implementation
+- `src/sagemaker_with_tools.py` - SageMaker LangChain integration
+- `src/content_handler.py` - Tool calling format handler
+- `deployment/deploy_llama3_lmi.py` - Endpoint deployment script
 
-- [LMI Container Documentation](https://docs.aws.amazon.com/sagemaker/latest/dg/large-model-inference.html)
-- [Llama 3 Model Card](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct)
-- [LangChain Documentation](https://python.langchain.com/)
-- [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
+## Troubleshooting
+
+**"Input validation error: Input length exceeds maximum"**
+- Query required too many tool calls
+- Simplify the query or upgrade to a model with larger context
+
+**"This model only supports single tool-calls at once"**
+- This is expected - agent handles it automatically
+- Tools are called sequentially, not in parallel
+
+**Agent returns outdated information**
+- Model may generate text instead of calling tools
+- This is a known limitation of Llama 3.1 8B
+- Try rephrasing the query or upgrade to a better model
+
+## Cost Estimate
+
+**SageMaker Endpoint** (ml.g5.2xlarge):
+- $1.52/hour
+- ~$36/day (24 hours)
+- ~$243/month (8 hours/day, 20 days)
+
+**API Costs** (per 1000 queries):
+- Tavily: ~$1-2
+- AlphaVantage: Free tier available
+- Edgar: Free
+
+## Next Steps
+
+1. **Try simple queries** to understand agent behavior
+2. **Review limitations** to set proper expectations
+3. **For production**: Upgrade to Llama 3.3 70B or use Bedrock
+4. **Explore LangGraph**: Learn agent patterns and workflows
+
+## Additional Documentation
+
+- `KNOWN_LIMITATIONS.md` - Detailed technical explanation of model limitations
+- `deployment/README.md` - Deployment guide and troubleshooting
 
 ## License
 
-Follows the Llama 3 Community License Agreement.
+This sample code is made available under the MIT-0 license. See the LICENSE file.

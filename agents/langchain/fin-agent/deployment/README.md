@@ -488,19 +488,35 @@ The deployment script automatically validates the endpoint by:
 Test the endpoint manually:
 
 ```python
-from deployment.deploy_endpoint import validate_endpoint
+import boto3
+import json
 
-result = validate_endpoint(
-    endpoint_name="your-endpoint-name",
-    region="us-west-2"
+# Initialize SageMaker runtime client
+runtime = boto3.client('sagemaker-runtime', region_name='us-west-2')
+
+# Test prompt with LMI format
+test_payload = {
+    "inputs": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nYou are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\nSay hello!<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
+    "parameters": {
+        "max_new_tokens": 50,
+        "temperature": 0.1,
+        "do_sample": True,
+        "top_p": 0.9
+    }
+}
+
+# Invoke endpoint
+response = runtime.invoke_endpoint(
+    EndpointName='your-endpoint-name',
+    ContentType='application/json',
+    Accept='application/json',
+    Body=json.dumps(test_payload)
 )
 
-if result['valid']:
-    print("✓ Endpoint is functional")
-    print(f"Response: {result['response']}")
-else:
-    print("✗ Validation failed")
-    print(f"Error: {result['message']}")
+# Parse response from LMI container
+result = json.loads(response['Body'].read().decode('utf-8'))
+print("✓ Endpoint is functional")
+print(f"Response: {result['generated_text']}")
 ```
 
 ### Health Check
@@ -578,20 +594,12 @@ aws cloudwatch put-metric-alarm \
 
 When you're done, delete the endpoint to stop incurring charges:
 
-**Option A: Using Python**
+**Option A: Using AWS Console**
 
-```python
-from deployment.deploy_endpoint import delete_endpoint
-
-result = delete_endpoint(
-    endpoint_name="your-endpoint-name",
-    region="us-west-2",
-    delete_model=True,
-    delete_endpoint_config=True
-)
-
-print(result['message'])
-```
+1. Go to SageMaker → Endpoints
+2. Select your endpoint
+3. Click "Delete"
+4. Confirm deletion
 
 **Option B: Using AWS CLI**
 

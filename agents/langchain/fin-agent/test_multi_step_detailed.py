@@ -13,8 +13,8 @@ import asyncio
 import os
 import sys
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
-from langchain_core.tools import BaseTool
-from typing import Any
+from langchain_core.tools import StructuredTool
+from typing import Any, Optional
 from pydantic import Field
 
 # Import the agent's build_graph
@@ -27,89 +27,52 @@ build_graph = fin_agent.build_graph
 SAGEMAKER_ENDPOINT_NAME = os.environ.get("SAGEMAKER_ENDPOINT_NAME", "llama3-lmi-agent")
 
 
-class DetailedMockTool(BaseTool):
-    """Mock tool that provides detailed output for testing."""
-    
-    name: str
-    description: str
-    args_schema: dict
-    response_text: str = Field(default="")
-    call_count: int = Field(default=0)
-    
-    def __init__(self, name: str, description: str, args_schema: dict, response: str):
-        super().__init__(
-            name=name,
-            description=description,
-            args_schema=args_schema,
-            response_text=response,
-            call_count=0
-        )
-    
-    def _run(self, **kwargs) -> str:
-        """Sync invoke method."""
-        self.call_count += 1
-        args_str = ", ".join(f"{k}={v}" for k, v in kwargs.items())
-        return f"{self.response_text} (called with: {args_str})"
-    
-    async def _arun(self, **kwargs) -> str:
-        """Async invoke method."""
-        self.call_count += 1
-        args_str = ", ".join(f"{k}={v}" for k, v in kwargs.items())
-        return f"{self.response_text} (called with: {args_str})"
-
-
 def create_test_tools():
-    """Create tools for multi-step testing."""
+    """Create tools for multi-step testing using StructuredTool."""
     
     # Tool 1: Get company ticker
-    ticker_tool = DetailedMockTool(
+    def get_company_ticker(company_name: str) -> str:
+        """Get the stock ticker symbol for a company name.
+        
+        Args:
+            company_name: Company name
+        """
+        return f"AAPL (called with: company_name={company_name})"
+    
+    ticker_tool = StructuredTool.from_function(
+        func=get_company_ticker,
         name="get_company_ticker",
-        description="Get the stock ticker symbol for a company name",
-        args_schema={
-            "type": "object",
-            "properties": {
-                "company_name": {
-                    "type": "string",
-                    "description": "Company name"
-                }
-            },
-            "required": ["company_name"]
-        },
-        response="AAPL"
+        description="Get the stock ticker symbol for a company name"
     )
     
     # Tool 2: Get stock price
-    price_tool = DetailedMockTool(
+    def get_stock_price(ticker: str) -> str:
+        """Get current stock price for a ticker symbol.
+        
+        Args:
+            ticker: Stock ticker symbol
+        """
+        return f"$178.50 (called with: ticker={ticker})"
+    
+    price_tool = StructuredTool.from_function(
+        func=get_stock_price,
         name="get_stock_price",
-        description="Get current stock price for a ticker symbol",
-        args_schema={
-            "type": "object",
-            "properties": {
-                "ticker": {
-                    "type": "string",
-                    "description": "Stock ticker symbol"
-                }
-            },
-            "required": ["ticker"]
-        },
-        response="$178.50"
+        description="Get current stock price for a ticker symbol"
     )
     
     # Tool 3: Get company revenue
-    revenue_tool = DetailedMockTool(
+    def get_company_revenue(ticker: str) -> str:
+        """Get annual revenue for a ticker symbol.
+        
+        Args:
+            ticker: Stock ticker symbol
+        """
+        return f"$394 billion (called with: ticker={ticker})"
+    
+    revenue_tool = StructuredTool.from_function(
+        func=get_company_revenue,
         name="get_company_revenue",
-        description="Get annual revenue for a ticker symbol",
-        args_schema={
-            "type": "object",
-            "properties": {
-                "ticker": {
-                    "type": "string",
-                    "description": "Stock ticker symbol"
-                }
-            },
-            "required": ["ticker"]
-        },
-        response="$394 billion"
+        description="Get annual revenue for a ticker symbol"
     )
     
     return [ticker_tool, price_tool, revenue_tool]
@@ -244,11 +207,13 @@ async def test_multi_step_detailed():
     print(f"\nTotal tool results received: {len(tool_results_received)}")
     print(f"\nFinal responses generated: {len(final_responses)}")
     
-    # Show tool call counts
+    # Show tool usage
     print("\n📊 Tool usage breakdown:")
+    tool_names_used = set(tool_calls_made)
     for tool in test_tools:
-        if tool.call_count > 0:
-            print(f"   - {tool.name}: {tool.call_count} call(s)")
+        if tool.name in tool_names_used:
+            count = tool_calls_made.count(tool.name)
+            print(f"   - {tool.name}: {count} call(s)")
     
     # Extract and display final response
     if final_responses:

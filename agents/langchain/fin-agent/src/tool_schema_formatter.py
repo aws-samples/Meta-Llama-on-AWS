@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 
 
 # Template for tool instructions that will be injected into the system prompt
-TOOL_INSTRUCTION_TEMPLATE = """You are a helpful assistant with access to the following tools:
+TOOL_INSTRUCTION_TEMPLATE = """You have access to the following tools:
 
 {tool_schemas}
 
