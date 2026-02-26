@@ -28,11 +28,11 @@ uv sync
 
 ### 2. Deploy SageMaker Endpoint
 
-```bash
-python deployment/deploy_llama3_lmi.py
-```
+1. Setup AWS account by following "deployment/README.md".
 
-Creates endpoint `llama3-lmi-agent` (~5-10 minutes).
+1. Run the deployment script described there (deployment/deploy_llama3_lmi.py) which creates endpoint (llama3-lmi-agent) and takes ~5-10 minutes.
+
+1. After you are done make sure you delete the endpoint so you do not continue incure charges. See section "Cleanup" in "deployment/README.md".
 
 ### 3. Set Environment Variables
 
@@ -50,6 +50,8 @@ uv run fin-agent-sagemaker-v2.py
 ```
 
 Try: "What is Apple's stock price?"
+
+After you are done make sure you delete the endpoint so you do not continue incure charges. See section "Cleanup" in "deployment/README.md".
 
 ## What Works Well ✅
 

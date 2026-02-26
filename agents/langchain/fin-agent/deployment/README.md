@@ -14,13 +14,6 @@ We use the **LMI (Large Model Inference) container** because:
 
 ## Quick Start
 
-```bash
-# 1. Set HuggingFace token
-export HF_TOKEN="your_huggingface_token"
-
-# 2. Run deployment script
-python deploy_llama3_lmi.py
-```
 
 The script will:
 - Create or use existing SageMaker execution role
@@ -76,9 +69,14 @@ The deployment requires access to Meta's Llama 3.1 model:
    export HUGGING_FACE_HUB_TOKEN="your_token_here"
    ```
 
-### 3. Service Quotas
+### 3. Check Service Quotas
 
 Check your SageMaker service quotas for GPU instances:
+
+If you need more quota, request an increase through the AWS Console webpage:
+1. Go to Service Quotas → AWS Services → Amazon SageMaker
+2. Find "ml.g5.2xlarge for endpoint usage"
+3. Request quota increase if needed
 
 ```bash
 aws service-quotas get-service-quota \
@@ -87,14 +85,9 @@ aws service-quotas get-service-quota \
   --region us-west-2
 ```
 
-If you need more quota, request an increase through the AWS Console:
-1. Go to Service Quotas → AWS Services → Amazon SageMaker
-2. Find "ml.g5.2xlarge for endpoint usage"
-3. Request quota increase if needed
+## Run Deployment Script
 
-## Deployment Script
-
-The `deploy_llama3_lmi.py` script automates the entire deployment process:
+Configure and run the deploy_llama3_lmi.py script that automates the entire deployment process:
 
 ### Features
 - **Automatic IAM Role Management**: Creates or uses existing SageMaker execution role
@@ -606,7 +599,7 @@ When you're done, delete the endpoint to stop incurring charges:
 ```bash
 # Delete endpoint
 aws sagemaker delete-endpoint \
-  --endpoint-name your-endpoint-name \
+  --endpoint-name "llama3-lmi-agent" \
   --region us-west-2
 
 # Delete endpoint configuration
