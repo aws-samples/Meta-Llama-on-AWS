@@ -1,0 +1,24 @@
+{
+  "name": "bedrock-kb",
+  "version": "1.0.0",
+  "description": "Bedrock Knowledge Base with OpenSearch Serverless",
+  "bin": {
+    "bedrock-kb": "bin/app.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "cdk": "cdk"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3",
+    "aws-cdk": "^2.177.0"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.177.0",
+    "constructs": "^10.3.0",
+    "source-map-support": "^0.5.21"
+  }
+}
