@@ -1,6 +1,6 @@
 # Multi-Agent SRE Incident Response System
 
-A production-ready multi-agent system for automated incident response using Amazon Bedrock AgentCore, Knowledge Base integration, and CloudWatch Logs analysis.
+A production-ready multi-agent system for automated incident response using Meta Llama 3.3 70B, Amazon Bedrock AgentCore, Knowledge Base integration, and CloudWatch Logs analysis.
 
 ## 🎯 What This Does
 
