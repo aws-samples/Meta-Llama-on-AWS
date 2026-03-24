@@ -17,4 +17,5 @@ dependencies = [
     "numpy<2.0",
     "pyarrow<18.0",
     "sagemaker>=2.0,<3.0",
+    "huggingface_hub>=0.20.0",
 ]

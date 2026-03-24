@@ -8,12 +8,17 @@ LangChain messages to OpenAI-compatible format and parses the native tool call r
 
 import json
 import logging
+import os
 from typing import Any, Dict, List
 
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_aws.chat_models.sagemaker_endpoint import ChatModelContentHandler
 
 logger = logging.getLogger(__name__)
+
+def _debug_enabled():
+    """Check if debug mode is on via DEBUG env var."""
+    return os.environ.get("DEBUG", "0") == "1"
 
 
 class LlamaFunctionCallingHandler(ChatModelContentHandler):
@@ -177,9 +182,9 @@ class LlamaFunctionCallingHandler(ChatModelContentHandler):
         payload["temperature"] = model_kwargs.get("temperature", 0.1)
         payload["top_p"] = model_kwargs.get("top_p", 0.9)
         
-        # Enable parallel tool calling if tools are present
+        # Disable parallel tool calling — agent handles sequential calls in code
         if tools:
-            payload["parallel_tool_calls"] = True
+            payload["parallel_tool_calls"] = False
         
         # CRITICAL DEBUG: Log payload details to diagnose context length issue
         payload_json = json.dumps(payload)
@@ -214,6 +219,10 @@ class LlamaFunctionCallingHandler(ChatModelContentHandler):
             tools_chars = len(tools_json)
             tools_tokens = tools_chars // 4
             logger.info(f"\n🔧 Tools payload: {tools_chars} chars (~{tools_tokens} tokens)")
+            if _debug_enabled():
+                print(f"\n[TOKEN DEBUG] Tools schema: ~{tools_tokens} tokens ({len(tools)} tools)")
+                print(f"[TOKEN DEBUG] Messages: ~{sum(t for _, _, _, t in message_sizes)} tokens ({message_count} messages)")
+                print(f"[TOKEN DEBUG] Total estimate: ~{approx_tokens} tokens + {payload['max_tokens']} completion = ~{approx_tokens + payload['max_tokens']}")
         
         logger.info("="*80)
         
@@ -278,8 +287,9 @@ class LlamaFunctionCallingHandler(ChatModelContentHandler):
             response = json.loads(output_bytes.decode("utf-8"))
             
             # DEBUG: Print full response structure
-            print(f"\n[CONTENT_HANDLER DEBUG] Full response:")
-            print(json.dumps(response, indent=2)[:1000])
+            if _debug_enabled():
+                print(f"\n[CONTENT_HANDLER DEBUG] Full response:")
+                print(json.dumps(response, indent=2)[:1000])
             
             logger.debug(f"DJL response: {json.dumps(response, indent=2)}")
             
@@ -298,12 +308,13 @@ class LlamaFunctionCallingHandler(ChatModelContentHandler):
             message = choice.get("message", {})
             
             # DEBUG: Print message structure
-            print(f"\n[CONTENT_HANDLER DEBUG] Message structure:")
-            print(f"  - role: {message.get('role')}")
-            print(f"  - content: {str(message.get('content', ''))[:200]}")
-            print(f"  - tool_calls present: {'tool_calls' in message}")
-            if 'tool_calls' in message:
-                print(f"  - tool_calls: {message['tool_calls']}")
+            if _debug_enabled():
+                print(f"\n[CONTENT_HANDLER DEBUG] Message structure:")
+                print(f"  - role: {message.get('role')}")
+                print(f"  - content: {str(message.get('content', ''))[:200]}")
+                print(f"  - tool_calls present: {'tool_calls' in message}")
+                if 'tool_calls' in message:
+                    print(f"  - tool_calls: {message['tool_calls']}")
             
             # Extract content
             content = message.get("content", "")
@@ -318,10 +329,11 @@ class LlamaFunctionCallingHandler(ChatModelContentHandler):
                         args = json.loads(raw_args_str)
                         
                         # DEBUG: Log before type coercion
-                        print(f"\n[TYPE_COERCION DEBUG] Before fix:")
-                        print(f"  Raw arguments string: {raw_args_str}")
-                        print(f"  Parsed args: {args}")
-                        print(f"  Arg types: {[(k, type(v).__name__) for k, v in args.items()]}")
+                        if _debug_enabled():
+                            print(f"\n[TYPE_COERCION DEBUG] Before fix:")
+                            print(f"  Raw arguments string: {raw_args_str}")
+                            print(f"  Parsed args: {args}")
+                            print(f"  Arg types: {[(k, type(v).__name__) for k, v in args.items()]}")
                         
                         # Fix: Convert string-formatted types to actual types
                         # The model sometimes outputs:
@@ -331,9 +343,10 @@ class LlamaFunctionCallingHandler(ChatModelContentHandler):
                         args = self._fix_string_arrays(args)
                         
                         # DEBUG: Log after type coercion
-                        print(f"\n[TYPE_COERCION DEBUG] After fix:")
-                        print(f"  Fixed args: {args}")
-                        print(f"  Arg types: {[(k, type(v).__name__) for k, v in args.items()]}")
+                        if _debug_enabled():
+                            print(f"\n[TYPE_COERCION DEBUG] After fix:")
+                            print(f"  Fixed args: {args}")
+                            print(f"  Arg types: {[(k, type(v).__name__) for k, v in args.items()]}")
                         
                         tool_calls.append({
                             "name": function.get("name"),

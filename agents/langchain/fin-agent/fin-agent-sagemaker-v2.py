@@ -76,6 +76,11 @@ TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
 ALPHAVANTAGE_API_KEY = os.environ.get("ALPHAVANTAGE_API_KEY")
 EDGAR_IDENTITY = os.environ.get("EDGAR_IDENTITY")
 
+# Debug mode — set via --debug flag or DEBUG=1 env var
+# When off, only essential output is shown (tool calls, responses)
+# When on, shows token counts, payload details, type coercion, etc.
+DEBUG_MODE = os.environ.get("DEBUG", "0") == "1"
+
 # MCP Server Configuration
 # AlphaVantage MCP uses stdio transport with uvx for reliable connection
 # Edgar MCP uses stdio transport with python module
@@ -101,8 +106,54 @@ if ALPHAVANTAGE_API_KEY:
     }
 
 SAGEMAKER_ENDPOINT_NAME = os.environ.get("SAGEMAKER_ENDPOINT_NAME", "llama3-lmi-agent")
-sagemaker_client = boto3.Session().client('sagemaker-runtime')
+
+from botocore.config import Config as BotoConfig
+sagemaker_client = boto3.Session().client(
+    'sagemaker-runtime',
+    config=BotoConfig(read_timeout=120)  # 70B model needs more time to generate
+)
 aws_region_name = boto3.Session().region_name
+
+
+def _detect_endpoint_context_window(endpoint_name, fallback=16384):
+    """Auto-detect the endpoint's max context window from its model config.
+
+    Queries SageMaker to find the OPTION_MAX_MODEL_LEN environment variable
+    set on the deployed model container. This avoids requiring the user to
+    manually keep MAX_CONTEXT_TOKENS in sync with the deployment profile.
+
+    Args:
+        endpoint_name: SageMaker endpoint name.
+        fallback: Default context window if detection fails.
+
+    Returns:
+        int: The endpoint's max model length.
+    """
+    try:
+        sm_client = boto3.client("sagemaker", region_name=aws_region_name)
+        # Endpoint → EndpointConfig → Model → Environment
+        ep = sm_client.describe_endpoint(EndpointName=endpoint_name)
+        config_name = ep["EndpointConfigName"]
+        ep_config = sm_client.describe_endpoint_config(EndpointConfigName=config_name)
+        model_name = ep_config["ProductionVariants"][0]["ModelName"]
+        model = sm_client.describe_model(ModelName=model_name)
+        env = model["PrimaryContainer"].get("Environment", {})
+        max_len = env.get("OPTION_MAX_MODEL_LEN")
+        if max_len:
+            detected = int(max_len)
+            if DEBUG_MODE:
+                print(f"  🔍 Auto-detected endpoint context window: {detected} tokens")
+            return detected
+    except Exception as e:
+        if DEBUG_MODE:
+            print(f"  ⚠️  Could not auto-detect context window: {e}")
+    return fallback
+
+
+# Auto-detect context window from the live endpoint, or fall back to env var / default.
+# The env var override is still supported for offline testing or edge cases.
+MAX_CONTEXT_TOKENS = int(os.environ.get("MAX_CONTEXT_TOKENS", "0")) or \
+    _detect_endpoint_context_window(SAGEMAKER_ENDPOINT_NAME)
 
 # --- Evaluator Prompt ---
 
@@ -316,240 +367,101 @@ def create_agent_node(llm_with_tools, available_tools):
     # Build tool list
     tool_list = "\n".join([f"- {tool.name}: {tool.description[:80]}..." for tool in available_tools[:15]])
 
-    system_prompt = f"""You are a helpful financial research assistant with access to the following tools:
+    system_prompt = f"""You are a financial research assistant. Use the available tools to answer queries.
 
-Available tools:
+Tools:
 {tool_list}
 
-⚠️ ⚠️ ⚠️ CRITICAL TOOL SELECTION RULES - READ FIRST ⚠️ ⚠️ ⚠️
+Rules:
+1. Call ONE tool at a time. Wait for the result before calling the next.
+2. For stock prices, use yahoo_stock_price(ticker). Do NOT use edgar_compare for prices.
+3. edgar_compare only accepts: revenue, net_income, gross_profit, operating_income, assets, liabilities, equity, margins, growth. Do NOT pass cash, price, or any other metric.
+4. If a tool returns incomplete data, call alternative tools for the missing items.
+5. Always use proper JSON types in arguments: arrays [], booleans true/false, integers without quotes.
+6. After collecting all data, synthesize a clear response."""
 
-🚨 BEFORE CALLING ANY TOOL, READ THIS DECISION TREE 🚨
+    # Pre-calculate tool schema overhead (this is constant per request)
+    _tool_schema_tokens = 0
+    for t in available_tools:
+        _tool_schema_tokens += len(t.name) // 4 + len(getattr(t, 'description', '') or '') // 4
+        if hasattr(t, 'args_schema'):
+            schema = t.args_schema
+            if isinstance(schema, dict):
+                _tool_schema_tokens += len(json.dumps(schema)) // 4
+            elif hasattr(schema, 'model_json_schema'):
+                _tool_schema_tokens += len(json.dumps(schema.model_json_schema())) // 4
+            elif hasattr(schema, 'schema'):
+                _tool_schema_tokens += len(json.dumps(schema.schema())) // 4
+    # Add overhead for JSON structure wrapping each tool
+    _tool_schema_tokens += len(available_tools) * 20
 
-Step 1: Identify what the user is asking for
-   - Does the query contain words: "price", "stock price", "current price", "market price", "share price"?
-     → YES: Go to Step 2a
-     → NO: Go to Step 2b
+    def _estimate_tokens(msgs):
+        """Rough token estimate (~4 chars per token) with safety margin.
+        
+        The len/4 heuristic underestimates by ~10-15% vs the actual Llama
+        tokenizer, especially for JSON-heavy tool schemas and structured
+        content. We apply a 1.15x multiplier to compensate.
+        """
+        total = 0
+        for m in msgs:
+            total += len(str(m.content) if hasattr(m, 'content') else str(m)) // 4
+            if hasattr(m, 'tool_calls') and m.tool_calls:
+                total += len(json.dumps(m.tool_calls)) // 4
+        return int(total * 1.15)  # 15% safety margin for tokenizer mismatch
 
-Step 2a: USER WANTS STOCK PRICES
-   ✅ YOU MUST USE: yahoo_stock_price(ticker)
-   ❌ YOU MUST NOT USE: edgar_compare
-   
-   Why? edgar_compare does NOT support price metrics and will FAIL with error:
-   "Input validation error: 'price' is not one of ['revenue', 'net_income', ...]"
-   
-   Examples:
-   - "What is Apple's stock price?" → yahoo_stock_price("AAPL")
-   - "Compare prices for AAPL, MSFT, GOOGL" → yahoo_stock_price("AAPL"), then yahoo_stock_price("MSFT"), then yahoo_stock_price("GOOGL")
-   - "Get current price for Tesla" → yahoo_stock_price("TSLA")
+    def _trim_messages(msgs, max_ctx=None, max_completion=512):
+        """Drop oldest tool call/result pairs when approaching context limit.
 
-Step 2b: USER WANTS FINANCIAL METRICS
-   - Does the query ask for: revenue, income, profit, assets, liabilities, equity, cash, margins, growth?
-     → YES: Use edgar_compare with appropriate metrics
-     → NO: Use other tools (yahoo_news, tavily_search, etc.)
-   
-   Examples:
-   - "What is Apple's revenue?" → edgar_compare(["AAPL"], metrics=["revenue"])
-   - "Compare revenue for AAPL and MSFT" → edgar_compare(["AAPL", "MSFT"], metrics=["revenue"])
-
-🔴 CRITICAL: edgar_compare ONLY accepts these metrics:
-   ✅ revenue, net_income, gross_profit, operating_income, assets, liabilities, equity, cash, margins, growth
-   
-🔴 edgar_compare will FAIL with these metrics:
-   ❌ price, stock_price, current_price, market_price, share_price
-   
-   If you use edgar_compare with "price", you will get this error:
-   "Input validation error: 'price' is not one of ['revenue', 'net_income', ...]"
-
-CRITICAL INSTRUCTIONS - YOU MUST FOLLOW THESE:
-
-1. ALWAYS USE FUNCTION CALLING FORMAT
-   - When you need information, you MUST call a tool using the function calling format
-   - NEVER write text descriptions of what tools you would call
-   - NEVER say "I would call tool X" - actually call it using function calling
-   - The system expects tool_calls in your response, not text about tools
-
-2. FUNCTION CALLING FORMAT EXAMPLE:
-   User: "What is Apple's stock price?"
-   
-   YOU MUST RESPOND WITH TOOL CALLS (not text):
-   <tool_call>
-   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "AAPL"}}}}
-   </tool_call>
-   
-   DO NOT respond with text like: "I will call yahoo_stock_price with ticker AAPL"
-   DO NOT respond with: "Let me check the stock price for you"
-   
-   After you receive the tool result, THEN you can provide a text response.
-
-3. MULTI-STEP EXAMPLE:
-   User: "What is Apple's ticker and current price?"
-   
-   Step 1 - Call first tool:
-   <tool_call>
-   {{"name": "get_company_ticker", "arguments": {{"company_name": "Apple"}}}}
-   </tool_call>
-   
-   [System returns: "AAPL"]
-   
-   Step 2 - Call second tool with result:
-   <tool_call>
-   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "AAPL"}}}}
-   </tool_call>
-   
-   [System returns: "$178.50"]
-   
-   Step 3 - Provide final answer:
-   "Apple's stock ticker is AAPL and the current price is $178.50"
-
-3a. CRITICAL - SEQUENTIAL TOOL CALLING ONLY:
-   ⚠️ YOU MUST CALL TOOLS ONE AT A TIME - NO PARALLEL CALLS! ⚠️
-   
-   The system does NOT support calling multiple tools simultaneously.
-   You MUST call ONE tool, wait for the result, then call the next tool.
-   
-   ❌ WRONG - Parallel calls (will cause ERROR):
-   <tool_call>
-   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "AAPL"}}}}
-   </tool_call>
-   <tool_call>
-   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "MSFT"}}}}
-   </tool_call>
-   
-   ✅ CORRECT - Sequential calls:
-   Step 1: Call first tool
-   <tool_call>
-   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "AAPL"}}}}
-   </tool_call>
-   
-   [Wait for result]
-   
-   Step 2: Call second tool
-   <tool_call>
-   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "MSFT"}}}}
-   </tool_call>
-   
-   [Wait for result]
-   
-   Step 3: Synthesize response with both results
-
-4. JSON TYPE RULES (for tool arguments):
-   - Arrays: Use square brackets: ["item1", "item2"]
-   - Booleans: Use lowercase true or false (NO quotes)
-   - Integers: Use plain numbers (NO quotes): 4
-   - Strings: Use quotes: "text"
-
-   ✅ CORRECT:
-   {{"identifier": "AAPL", "include": ["profile"], "periods": 4, "annual": true}}
-   
-   ❌ WRONG:
-   {{"identifier": "AAPL", "include": "profile", "periods": "4", "annual": "true"}}
-
-5. INCOMPLETE TOOL RESULTS - CRITICAL RECOVERY STRATEGY:
-   
-   ALWAYS validate tool results before responding to the user!
-   
-   When you receive a tool result, CHECK:
-   a) Does it contain data for ALL items the user asked about?
-      - User asked for 3 companies → result should have 3 companies
-      - User asked for 5 metrics → result should have 5 metrics
-   
-   b) Does it contain ALL data types the user requested?
-      - User asked for price AND revenue → result should have both
-      - User asked for current AND historical → result should have both
-   
-   c) Is the data complete and not truncated?
-      - Check for "..." or "[truncated]" indicators
-      - Check if data seems cut off mid-sentence
-   
-   If ANY check fails, the result is INCOMPLETE - DO NOT respond yet!
-   
-   RECOVERY STEPS when tool returns incomplete data:
-   
-   Step 1: IDENTIFY what's missing
-   Example: User asked for Apple, Microsoft, Google but only got Apple data
-   Missing: Microsoft, Google
-   
-   Step 2: CALL ALTERNATIVE TOOLS for missing data
-   Call tools ONE AT A TIME (sequential, not parallel):
-   
-   First call:
-   <tool_call>
-   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "MSFT"}}}}
-   </tool_call>
-   
-   [Wait for result, then make next call]
-   
-   Second call:
-   <tool_call>
-   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "GOOGL"}}}}
-   </tool_call>
-   
-   Step 3: SYNTHESIZE complete response
-   Combine data from all tools and provide complete answer
-   
-   TOOL ALTERNATIVES (use when primary tool fails):
-   
-   Stock Price Data:
-   - Primary: yahoo_stock_price(ticker)
-   - Backup: edgar_compare([ticker])
-   - Last resort: tavily_search("ticker stock price")
-   
-   Company Financial Data:
-   - Primary: edgar_compare([ticker])
-   - Backup: yahoo_financials(ticker) if available
-   - Last resort: tavily_search("ticker financials")
-   
-   Multi-Company Comparison:
-   - If edgar_compare([A, B, C]) only returns data for A:
-     → Call yahoo_stock_price(B) and yahoo_stock_price(C)
-     → Combine all results for complete comparison
-   
-   EXAMPLE - Recovering from incomplete result:
-   
-   User: "Compare Apple, Microsoft, and Google stock prices"
-   
-   You call: edgar_compare(["AAPL", "MSFT", "GOOGL"])
-   Result: Only Apple data (price: $178.50)
-   
-   ❌ WRONG - Don't give up:
-   "I only got data for Apple. I need more information for Microsoft and Google."
-   
-   ✅ CORRECT - Recover with alternative tools:
-   Detect: Missing Microsoft and Google
-   Call alternatives:
-   <tool_call>
-   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "MSFT"}}}}
-   </tool_call>
-   <tool_call>
-   {{"name": "yahoo_stock_price", "arguments": {{"ticker": "GOOGL"}}}}
-   </tool_call>
-   
-   [Receive results: MSFT=$420.50, GOOGL=$142.30]
-   
-   Synthesize complete response:
-   "Here's the stock price comparison:
-   - Apple (AAPL): $178.50
-   - Microsoft (MSFT): $420.50
-   - Google (GOOGL): $142.30
-   
-   Microsoft has the highest price, followed by Apple, then Google."
-   
-   NEVER give up after a single incomplete tool result!
-   ALWAYS try alternative tools to complete the user's request!
-
-Remember: ALWAYS use function calling format. NEVER describe what you would do - DO IT."""
+        Preserves: system prompt (idx 0), user message (idx 1), and the
+        most recent 4 messages so the model has enough recent context.
+        
+        Accounts for tool schema overhead that gets injected into every request.
+        """
+        if max_ctx is None:
+            max_ctx = MAX_CONTEXT_TOKENS
+        
+        # Budget = context limit - completion tokens - tool schema overhead
+        # Apply safety margin to tool schema too
+        tool_overhead = int(_tool_schema_tokens * 1.15)
+        budget = max_ctx - max_completion - tool_overhead
+        
+        if DEBUG_MODE:
+            print(f"  📐 Token budget: {max_ctx} - {max_completion} completion - {tool_overhead} tools (w/ margin) = {budget}")
+        
+        # First pass: truncate long tool results (ToolMessage content)
+        trimmed = []
+        for m in msgs:
+            if isinstance(m, ToolMessage) and m.content and len(str(m.content)) > 2500:
+                # Truncate tool results to ~625 tokens to save space
+                truncated_content = str(m.content)[:2500] + "\n...[truncated]"
+                trimmed.append(ToolMessage(content=truncated_content, tool_call_id=m.tool_call_id))
+            else:
+                trimmed.append(m)
+        
+        # Second pass: drop oldest tool call/result pairs if still over budget
+        head, tail = 2, 4  # keep first 2 (system + user) and last 4
+        while _estimate_tokens(trimmed) > budget and len(trimmed) > head + tail:
+            removed = trimmed.pop(head)
+            if DEBUG_MODE:
+                print(f"  🗑️  Trimmed {removed.__class__.__name__} to fit context window")
+        
+        if DEBUG_MODE:
+            print(f"  📏 Context after trim: ~{_estimate_tokens(trimmed)} tokens (budget: {budget})")
+        return trimmed
 
     def agent(state: AgentState) -> dict:
         messages = [SystemMessage(content=system_prompt)] + state["messages"]
+        messages = _trim_messages(messages)
         response = llm_with_tools.invoke(messages)
         
         # Debug: Print what the model returned
-        print(f"\n[DEBUG] Agent response type: {type(response)}")
-        print(f"[DEBUG] Has tool_calls: {hasattr(response, 'tool_calls')}")
-        if hasattr(response, 'tool_calls'):
-            print(f"[DEBUG] Tool calls: {response.tool_calls}")
-        if hasattr(response, 'content'):
-            print(f"[DEBUG] Content preview: {str(response.content)[:200]}...")
+        if DEBUG_MODE:
+            print(f"\n[DEBUG] Agent response type: {type(response)}")
+            print(f"[DEBUG] Has tool_calls: {hasattr(response, 'tool_calls')}")
+            if hasattr(response, 'tool_calls'):
+                print(f"[DEBUG] Tool calls: {response.tool_calls}")
+            if hasattr(response, 'content'):
+                print(f"[DEBUG] Content preview: {str(response.content)[:200]}...")
         
         # CRITICAL: Validate and fix tool calls BEFORE returning
         # This prevents parallel calls from reaching SageMaker
@@ -572,10 +484,11 @@ Remember: ALWAYS use function calling format. NEVER describe what you would do -
                     
                     if has_price:
                         needs_fixing = True
-                        print(f"\n⚠️  VALIDATION: Detected invalid edgar_compare call with price metrics")
-                        print(f"   Metrics: {metrics}")
-                        print(f"   Identifiers: {identifiers}")
-                        print(f"   🔧 Converting to yahoo_stock_price calls...")
+                        if DEBUG_MODE:
+                            print(f"\n⚠️  VALIDATION: Detected invalid edgar_compare call with price metrics")
+                            print(f"   Metrics: {metrics}")
+                            print(f"   Identifiers: {identifiers}")
+                            print(f"   🔧 Converting to yahoo_stock_price calls...")
                         
                         # Create yahoo_stock_price calls for each identifier
                         for identifier in identifiers:
@@ -586,7 +499,8 @@ Remember: ALWAYS use function calling format. NEVER describe what you would do -
                                 "type": "tool_call"
                             }
                             fixed_calls.append(fixed_call)
-                            print(f"   ✅ Created: yahoo_stock_price(ticker='{identifier}')")
+                            if DEBUG_MODE:
+                                print(f"   ✅ Created: yahoo_stock_price(ticker='{identifier}')")
                         
                         continue  # Skip the invalid edgar_compare call
                 
@@ -596,10 +510,11 @@ Remember: ALWAYS use function calling format. NEVER describe what you would do -
             # CRITICAL: Ensure only ONE tool call (no parallel calls)
             if len(fixed_calls) > 1:
                 needs_fixing = True
-                print(f"\n⚠️  VALIDATION: Detected {len(fixed_calls)} parallel tool calls")
-                print(f"   SageMaker endpoint only supports ONE tool call at a time")
-                print(f"   🔧 Keeping only the FIRST tool call: {fixed_calls[0]['name']}")
-                print(f"   ℹ️  Agent will call remaining tools in subsequent turns")
+                if DEBUG_MODE:
+                    print(f"\n⚠️  VALIDATION: Detected {len(fixed_calls)} parallel tool calls")
+                    print(f"   SageMaker endpoint only supports ONE tool call at a time")
+                    print(f"   🔧 Keeping only the FIRST tool call: {fixed_calls[0]['name']}")
+                    print(f"   ℹ️  Agent will call remaining tools in subsequent turns")
                 fixed_calls = [fixed_calls[0]]  # Keep only the first call
             
             if needs_fixing:
@@ -608,7 +523,8 @@ Remember: ALWAYS use function calling format. NEVER describe what you would do -
                     content=response.content or "",
                     tool_calls=fixed_calls
                 )
-                print(f"   ✅ Tool calls validated and fixed\n")
+                if DEBUG_MODE:
+                    print(f"   ✅ Tool calls validated and fixed\n")
         
         return {"messages": [response]}
 
@@ -622,9 +538,10 @@ def create_final_response_node(llm_no_tools):
     """
 
     def final_response(state: AgentState) -> dict:
-        print("\n" + "="*80)
-        print("🔍 FINAL_RESPONSE NODE - GENERATING RESPONSE")
-        print("="*80)
+        if DEBUG_MODE:
+            print("\n" + "="*80)
+            print("🔍 FINAL_RESPONSE NODE - GENERATING RESPONSE")
+            print("="*80)
 
         messages = state["messages"]
         
@@ -649,7 +566,11 @@ def create_final_response_node(llm_no_tools):
                 tool_results.append(truncated)
         
         # Build a clear prompt for final response
-        system_msg = "You are a helpful financial assistant. Synthesize the tool results into a clear, comprehensive response."
+        system_msg = (
+            "You are a helpful financial assistant. Synthesize the tool results below into a clear, "
+            "comprehensive response. Present actual numbers and data from the results. "
+            "Do NOT suggest the user visit other websites — answer directly with the data you have."
+        )
         
         # Include user query and tool results
         context_parts = [f"User query: {user_query}"]
@@ -658,9 +579,10 @@ def create_final_response_node(llm_no_tools):
         
         combined_context = "\n".join(context_parts)
         
-        print(f"📊 Context length: {len(combined_context)} chars (~{len(combined_context)//4} tokens)")
-        print(f"📊 Tool results included: {len(tool_results)}")
-        print("="*80)
+        if DEBUG_MODE:
+            print(f"📊 Context length: {len(combined_context)} chars (~{len(combined_context)//4} tokens)")
+            print(f"📊 Tool results included: {len(tool_results)}")
+            print("="*80)
 
         # Send with system message for better responses
         final_messages = [
@@ -760,10 +682,11 @@ def validate_and_fix_tool_calls(state: AgentState) -> dict:
             
             if has_price:
                 needs_fixing = True
-                print(f"\n⚠️  VALIDATION: Detected invalid edgar_compare call with price metrics")
-                print(f"   Metrics: {metrics}")
-                print(f"   Identifiers: {identifiers}")
-                print(f"   🔧 Converting to yahoo_stock_price calls...")
+                if DEBUG_MODE:
+                    print(f"\n⚠️  VALIDATION: Detected invalid edgar_compare call with price metrics")
+                    print(f"   Metrics: {metrics}")
+                    print(f"   Identifiers: {identifiers}")
+                    print(f"   🔧 Converting to yahoo_stock_price calls...")
                 
                 # Create yahoo_stock_price calls for each identifier
                 for identifier in identifiers:
@@ -774,7 +697,8 @@ def validate_and_fix_tool_calls(state: AgentState) -> dict:
                         "type": "tool_call"
                     }
                     fixed_calls.append(fixed_call)
-                    print(f"   ✅ Created: yahoo_stock_price(ticker='{identifier}')")
+                    if DEBUG_MODE:
+                        print(f"   ✅ Created: yahoo_stock_price(ticker='{identifier}')")
                 
                 continue  # Skip the invalid edgar_compare call
         
@@ -784,10 +708,11 @@ def validate_and_fix_tool_calls(state: AgentState) -> dict:
     # CRITICAL: Ensure only ONE tool call (no parallel calls)
     if len(fixed_calls) > 1:
         needs_fixing = True
-        print(f"\n⚠️  VALIDATION: Detected {len(fixed_calls)} parallel tool calls")
-        print(f"   SageMaker endpoint only supports ONE tool call at a time")
-        print(f"   🔧 Keeping only the FIRST tool call: {fixed_calls[0]['name']}")
-        print(f"   ℹ️  Agent will call remaining tools in subsequent turns")
+        if DEBUG_MODE:
+            print(f"\n⚠️  VALIDATION: Detected {len(fixed_calls)} parallel tool calls")
+            print(f"   SageMaker endpoint only supports ONE tool call at a time")
+            print(f"   🔧 Keeping only the FIRST tool call: {fixed_calls[0]['name']}")
+            print(f"   ℹ️  Agent will call remaining tools in subsequent turns")
         fixed_calls = [fixed_calls[0]]  # Keep only the first call
     
     if needs_fixing:
@@ -799,11 +724,69 @@ def validate_and_fix_tool_calls(state: AgentState) -> dict:
         
         # Replace the last message
         new_messages = messages[:-1] + [fixed_message]
-        print(f"   ✅ Tool calls validated and fixed\n")
+        if DEBUG_MODE:
+            print(f"   ✅ Tool calls validated and fixed\n")
         return {"messages": new_messages}
     
     # No fixes needed
     return {"messages": []}
+
+
+def check_tool_errors(state: AgentState) -> dict:
+    """Inspect the last tool result. If it's an error, inject a hint so the model
+    tries an alternative tool instead of retrying the same one."""
+    messages = state["messages"]
+    if not messages:
+        return {"messages": []}
+
+    last = messages[-1]
+    if not isinstance(last, ToolMessage):
+        return {"messages": []}
+
+    content = str(last.content) if last.content else ""
+    error_indicators = [
+        "Error:",
+        "error",
+        "Traceback",
+        "Exception",
+        "validation error",
+        "failed",
+        "timed out",
+    ]
+    is_error = any(ind.lower() in content.lower() for ind in error_indicators)
+
+    if not is_error:
+        return {"messages": []}
+
+    # Find which tool failed by looking at the preceding AIMessage
+    failed_tool = "the previous tool"
+    for msg in reversed(messages[:-1]):
+        if isinstance(msg, AIMessage) and msg.tool_calls:
+            failed_tool = msg.tool_calls[-1].get("name", failed_tool)
+            break
+
+    # Count how many times this specific tool has failed
+    fail_count = 0
+    for i, msg in enumerate(messages):
+        if isinstance(msg, ToolMessage) and msg.content:
+            msg_content = str(msg.content).lower()
+            if any(ind.lower() in msg_content for ind in error_indicators):
+                # Check if the preceding AI message called the same tool
+                for prev in reversed(messages[:i]):
+                    if isinstance(prev, AIMessage) and prev.tool_calls:
+                        if prev.tool_calls[-1].get("name") == failed_tool:
+                            fail_count += 1
+                        break
+
+    if DEBUG_MODE:
+        print(f"\n⚠️  Tool error detected: {failed_tool} (failed {fail_count}x)")
+
+    hint = (
+        f"The tool '{failed_tool}' returned an error. Do NOT retry it. "
+        f"Use a different tool to get the information. "
+        f"For financial data, try tavily_search or yahoo_stock_price/yahoo_news instead."
+    )
+    return {"messages": [SystemMessage(content=hint)]}
 
 
 def should_continue(state: AgentState) -> str:
@@ -830,7 +813,8 @@ def should_continue(state: AgentState) -> str:
         
         # If we've seen these exact calls 2+ times, it's a loop
         if call_count >= 2:
-            print(f"[Loop detected: {call_count} repetitions of {[c[0] for c in current_calls]}]")
+            if DEBUG_MODE:
+                print(f"[Loop detected: {call_count} repetitions of {[c[0] for c in current_calls]}]")
             return "final_response"
         
         # Execute tools (validation already happened in agent node)
@@ -1085,7 +1069,7 @@ def build_graph(mcp_tools: list, max_revisions: int = 3, shortcut_quality_score:
 
     # Create nodes
     agent_node = create_agent_node(llm_with_tools, all_tools)
-    tool_node = ToolNode(all_tools)
+    tool_node = ToolNode(all_tools, handle_tool_errors=True)
     final_response_node = create_final_response_node(llm_no_tools)
     reviser_node = create_reviser_node(llm_no_tools)  # Use llm_no_tools for reviser too
     evaluator_node = create_evaluator_node(llm_no_tools)  # Use llm_no_tools for evaluator
@@ -1098,6 +1082,7 @@ def build_graph(mcp_tools: list, max_revisions: int = 3, shortcut_quality_score:
     # Add nodes
     workflow.add_node("agent", agent_node)
     workflow.add_node("tools", tool_node)
+    workflow.add_node("check_tool_errors", check_tool_errors)
     workflow.add_node("final_response", final_response_node)
     workflow.add_node("reviser", reviser_node)
     workflow.add_node("evaluator", evaluator_node)
@@ -1106,7 +1091,8 @@ def build_graph(mcp_tools: list, max_revisions: int = 3, shortcut_quality_score:
     # Add edges
     workflow.add_edge(START, "agent")
     workflow.add_conditional_edges("agent", should_continue)
-    workflow.add_edge("tools", "agent")  # After tools, go back to agent to check if more tools needed
+    workflow.add_edge("tools", "check_tool_errors")  # After tools, check for errors first
+    workflow.add_edge("check_tool_errors", "agent")  # Then back to agent (with hint if error)
     workflow.add_edge("final_response", END)  # Skip evaluator/reviser - go directly to END
     # Disabled for now due to context length issues:
     # workflow.add_edge("final_response", "reviser")
@@ -1284,7 +1270,14 @@ if __name__ == "__main__":
                         help="Stop early if evaluation score reaches this threshold (default: 4.95)")
     parser.add_argument("--graph-filename", type=str, default=None,
                         help="Filename for saving the graph visualization (optional)")
+    parser.add_argument("--debug", action="store_true",
+                        help="Enable verbose debug output (token counts, payload details, type coercion)")
     args = parser.parse_args()
+
+    # Set global DEBUG_MODE from CLI flag (overrides env var)
+    if args.debug:
+        DEBUG_MODE = True
+        os.environ["DEBUG"] = "1"  # Propagate to content_handler via env
 
     asyncio.run(run_cli(
         evaluate_mode=args.evaluate,
