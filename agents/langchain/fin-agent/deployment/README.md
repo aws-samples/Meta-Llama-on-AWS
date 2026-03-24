@@ -1,6 +1,6 @@
 # SageMaker Endpoint Deployment Guide - LMI Container
 
-This guide provides step-by-step instructions for deploying the Llama 3.1 8B Instruct model to AWS SageMaker with function calling support using AWS's LMI (Large Model Inference) container with vLLM backend.
+This guide covers deploying Llama models (8B and 70B) to AWS SageMaker with function calling support using AWS's LMI (Large Model Inference) container with vLLM backend.
 
 ## Why LMI Container?
 
@@ -12,34 +12,47 @@ We use the **LMI (Large Model Inference) container** because:
 
 **Note**: The standard HuggingFace TGI container does not support the function calling features required for this agent.
 
-## Quick Start
+## Model Comparison
 
+| Feature | Llama 3.1 8B | Llama 3.1/3.3 70B |
+|---------|-------------|-------------------|
+| Context Window | 8,192 tokens | Up to 128K tokens |
+| Tool Calling | Inconsistent on complex queries | Reliable, multi-step support |
+| Min Instance | `ml.g5.2xlarge` (1 GPU) | `ml.g5.48xlarge` (8 GPUs) |
+| Min Cost/Hour | ~$1.52 | ~$7.09 (quantized) / ~$20.36 (FP16) |
+| Deploy Time | ~5-10 min | ~10-25 min |
+| Best For | Learning, demos, simple queries | Production, complex multi-tool queries |
+| Deploy Script | `deploy_llama3_lmi.py` | `deploy_llama3_70b.py` |
 
-The script will:
-- Create or use existing SageMaker execution role
-- Deploy Llama 3.1 8B with **LMI container and vLLM backend**
-- Configure tool calling support with **llama3_json parser**
-- Wait for endpoint to be ready (~5-10 minutes)
+Both models use the same LMI container, vLLM backend, and OpenAI-compatible chat completion API. The agent code works with either model — switch by changing only the `SAGEMAKER_ENDPOINT_NAME` environment variable:
+
+```bash
+# Use the 8B model (lower cost, development)
+export SAGEMAKER_ENDPOINT_NAME="llama3-lmi-agent"
+
+# Use the 70B model (better quality, production)
+export SAGEMAKER_ENDPOINT_NAME="llama3-70b-lmi-agent"
+
+# Then run the agent as usual
+python fin-agent-sagemaker-v2.py
+```
 
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
-- [Deployment Script](#deployment-script)
-- [Configuration](#configuration)
+- [Deploying the 8B Model](#deploying-the-8b-model)
+- [Deploying the 70B Model](#deploying-the-70b-model)
+  - [Instance Type Selection](#instance-type-selection)
+  - [70B Quick Start](#70b-quick-start)
+  - [S3 Model Pre-Download](#s3-model-pre-download)
 - [IAM Role Setup](#iam-role-setup)
+- [Configuration Reference](#configuration-reference)
 - [Validation](#validation)
 - [Monitoring](#monitoring)
 - [Cleanup](#cleanup)
 - [Troubleshooting](#troubleshooting)
-- [Llama 70B Deployment](#llama-70b-deployment)
-  - [70B Interactive Instance Selector](#70b-interactive-instance-selector)
-  - [70B Instance Type Comparison](#70b-instance-type-comparison)
-  - [70B Quick Start](#70b-quick-start)
-  - [70B Configuration](#70b-configuration)
-  - [S3 Model Pre-Download](#s3-model-pre-download)
-  - [70B Cost Estimates](#70b-cost-estimates)
-  - [70B Troubleshooting](#70b-troubleshooting)
-  - [Switching Between 8B and 70B](#switching-between-8b-and-70b)
+- [Cost Estimation](#cost-estimation)
+- [Additional Resources](#additional-resources)
 
 ## Prerequisites
 
@@ -66,77 +79,50 @@ The script will:
 
 ### 2. HuggingFace Token Setup
 
-The deployment requires access to Meta's Llama 3.1 model:
+The deployment requires access to Meta's Llama models:
 
 1. Create a HuggingFace account at https://huggingface.co
-2. Accept the Llama 3.1 license at https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct
+2. Accept the Llama license:
+   - 8B: https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct
+   - 70B: https://huggingface.co/meta-llama/Meta-Llama-3.1-70B-Instruct
 3. Generate an access token at https://huggingface.co/settings/tokens
 4. Set environment variable:
    ```bash
    export HF_TOKEN="your_token_here"
-   # or
-   export HUGGING_FACE_HUB_TOKEN="your_token_here"
    ```
 
 ### 3. Check Service Quotas
 
 Check your SageMaker service quotas for GPU instances:
 
-If you need more quota, request an increase through the AWS Console webpage:
-1. Go to Service Quotas → AWS Services → Amazon SageMaker
-2. Find "ml.g5.2xlarge for endpoint usage"
-3. Request quota increase if needed
-
 ```bash
-# List SageMaker endpoint quotas and search for your instance type
+# For 8B deployment (ml.g5.2xlarge)
 aws service-quotas list-service-quotas \
   --service-code sagemaker \
   --region us-west-2 \
   --query "Quotas[?contains(QuotaName, 'g5.2xlarge') && contains(QuotaName, 'endpoint')].{Name:QuotaName,Value:Value,Code:QuotaCode}" \
   --output table
+
+# For 70B deployment (ml.g5.48xlarge)
+aws service-quotas list-service-quotas \
+  --service-code sagemaker \
+  --region us-west-2 \
+  --query "Quotas[?contains(QuotaName, 'g5.48xlarge') && contains(QuotaName, 'endpoint')].{Name:QuotaName,Value:Value,Code:QuotaCode}" \
+  --output table
 ```
 
-## Run Deployment Script
+If you need more quota, request an increase through the AWS Console:
+1. Go to Service Quotas → AWS Services → Amazon SageMaker
+2. Find the quota for your target instance type
+3. Request quota increase if needed
 
-Configure and run the deploy_llama3_lmi.py script that automates the entire deployment process:
+---
 
-### Features
-- **Automatic IAM Role Management**: Creates or uses existing SageMaker execution role
-- **LMI Container**: Uses AWS's Large Model Inference container with vLLM backend
-- **Tool Calling Support**: Configures llama3_json parser for function calling
-- **Progress Monitoring**: Real-time deployment status updates
-- **Error Handling**: Clear error messages and troubleshooting guidance
+## Deploying the 8B Model
 
-### Configuration
+The 8B model is ideal for development, learning agent patterns, and cost-conscious experimentation. It runs on a single GPU instance.
 
-The script uses these default settings (can be modified in the script):
-
-```python
-# Endpoint Configuration
-ENDPOINT_NAME = "llama3-lmi-agent"
-AWS_REGION = "us-west-2"
-INSTANCE_TYPE = "ml.g5.2xlarge"  # 1x A10G GPU (24GB)
-INSTANCE_COUNT = 1
-
-# Model Configuration
-HF_MODEL_ID = "meta-llama/Meta-Llama-3.1-8B-Instruct"
-
-# LMI Container Environment Variables
-# These configure the vLLM backend for optimal function calling
-MODEL_ENV = {
-    "HF_MODEL_ID": HF_MODEL_ID,
-    "HF_TOKEN": HF_TOKEN,  # From environment variable
-    "OPTION_ROLLING_BATCH": "vllm",  # Use vLLM backend
-    "OPTION_ENABLE_AUTO_TOOL_CHOICE": "true",  # Enable function calling
-    "OPTION_TOOL_CALL_PARSER": "llama3_json",  # Use Llama 3 JSON parser
-    "OPTION_MAX_ROLLING_BATCH_SIZE": "32",
-    "OPTION_MAX_MODEL_LEN": "8192",
-    "OPTION_DTYPE": "fp16",
-    "TENSOR_PARALLEL_DEGREE": "1"
-}
-```
-
-### Running the Script
+### Quick Start
 
 ```bash
 # Set HuggingFace token
@@ -147,15 +133,40 @@ python deploy_llama3_lmi.py
 ```
 
 The script will:
-1. Check for existing endpoint
-2. Create or use existing SageMaker execution role
-3. Create SageMaker model with LMI container
-4. Create endpoint configuration
-5. Deploy endpoint
-6. Monitor deployment progress (~5-10 minutes)
-7. Display success message with next steps
+- Create or use existing SageMaker execution role
+- Deploy Llama 3.1 8B with LMI container and vLLM backend
+- Configure tool calling support with `llama3_json` parser
+- Wait for endpoint to be ready (~5-10 minutes)
 
-### Expected Output
+### 8B Default Configuration
+
+```python
+ENDPOINT_NAME = "llama3-lmi-agent"
+INSTANCE_TYPE = "ml.g5.2xlarge"  # 1x A10G GPU (24GB)
+HF_MODEL_ID = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+
+MODEL_ENV = {
+    "HF_MODEL_ID": HF_MODEL_ID,
+    "HF_TOKEN": HF_TOKEN,
+    "OPTION_ROLLING_BATCH": "vllm",
+    "OPTION_ENABLE_AUTO_TOOL_CHOICE": "true",
+    "OPTION_TOOL_CALL_PARSER": "llama3_json",
+    "OPTION_MAX_ROLLING_BATCH_SIZE": "32",
+    "OPTION_MAX_MODEL_LEN": "8192",
+    "OPTION_DTYPE": "fp16",
+    "TENSOR_PARALLEL_DEGREE": "1"
+}
+```
+
+### 8B Instance Options
+
+| Instance Type | GPU | vCPU | Memory | Use Case | Cost/Hour |
+|---------------|-----|------|--------|----------|-----------|
+| ml.g5.2xlarge | 1 | 8 | 32 GB | Development, low traffic | ~$1.52 |
+| ml.g5.4xlarge | 1 | 16 | 64 GB | Production, medium traffic | ~$2.03 |
+| ml.g5.12xlarge | 4 | 48 | 192 GB | High traffic, low latency | ~$7.09 |
+
+### 8B Expected Output
 
 ```
 ================================================================================
@@ -173,56 +184,196 @@ Proceed with deployment? (yes/no): yes
 
 🔍 Looking for SageMaker execution role...
 ✅ Found existing role: arn:aws:iam::123456789:role/SageMakerExecutionRole
-
---------------------------------------------------------------------------------
-  Step 1: Creating Model
---------------------------------------------------------------------------------
-Creating model: llama3-lmi-agent-model-1234567890
-✅ Model created
-
---------------------------------------------------------------------------------
-  Step 2: Creating Endpoint Configuration
---------------------------------------------------------------------------------
-Creating endpoint configuration: llama3-lmi-agent-config-1234567890
-✅ Endpoint configuration created
-
---------------------------------------------------------------------------------
-  Step 3: Creating Endpoint
---------------------------------------------------------------------------------
-Creating endpoint: llama3-lmi-agent
-⏳ This will take 5-10 minutes...
-✅ Endpoint creation initiated
-
---------------------------------------------------------------------------------
-  Waiting for Endpoint Deployment
---------------------------------------------------------------------------------
-[0s] Status: Creating
-[30s] Status: Creating
-[300s] Status: InService
-
+...
 ================================================================================
-✅ Endpoint deployed successfully in 300 seconds!
+✅ Endpoint deployed successfully!
 
 Endpoint Name: llama3-lmi-agent
 Status: InService
-Container: LMI with vLLM backend
-Tool Calling: Enabled (llama3_json parser)
 ================================================================================
 
 📋 Next Steps:
-1. Set environment variable:
-   export SAGEMAKER_ENDPOINT_NAME="llama3-lmi-agent"
-
-2. Test tool calling:
-   python test_multiple_parallel_tools.py
-
-3. Run agent:
-   python fin-agent-sagemaker-v2.py
+1. export SAGEMAKER_ENDPOINT_NAME="llama3-lmi-agent"
+2. python test_multiple_parallel_tools.py
+3. python fin-agent-sagemaker-v2.py
 ```
+
+### 8B Known Limitations
+
+- **Inconsistent tool calling format**: May fail on complex multi-step queries
+- **Context window limit (8,192 tokens)**: Agent can make 5-6 tool calls before hitting the limit
+- **Sequential tool calling only**: SageMaker endpoint processes one tool at a time
+
+For production workloads, consider upgrading to the 70B model.
+
+---
+
+## Deploying the 70B Model
+
+The 70B model offers significantly improved tool calling reliability, a 128K token context window, and better reasoning for complex multi-tool queries. It requires a multi-GPU instance with tensor parallelism to fit its ~140GB FP16 weights in GPU memory.
+
+### Instance Type Selection
+
+The deployment script includes an interactive instance selector. Run the script and choose from the menu:
+
+```bash
+python deployment/deploy_llama3_70b.py
+```
+
+```
+========================================================================
+  SELECT INSTANCE TYPE
+========================================================================
+
+  [1] ml.g5.48xlarge ← current default
+      GPUs: 8x A10G  |  VRAM: 192 GB  |  TP: 8-way
+      Context: 16384 tokens  |  Batch: 4
+      Dtype: fp16  |  GPU Mem: 0.95
+      Cost: ~$20.36/hr
+      Default. FP16, no quantization needed.
+
+  [2] ml.p4d.24xlarge
+      GPUs: 8x A100  |  VRAM: 320 GB  |  TP: 8-way
+      Context: 32768 tokens  |  Batch: 8
+      Dtype: fp16  |  GPU Mem: 0.90
+      Cost: ~$25.25/hr
+      Higher throughput, lower latency. Supports 32K+ context.
+
+  [3] ml.g5.12xlarge
+      GPUs: 4x A10G  |  VRAM: 96 GB  |  TP: 4-way
+      Context: 8192 tokens  |  Batch: 4
+      Dtype: auto  |  GPU Mem: 0.90
+      Cost: ~$7.09/hr
+      Budget. Requires AWQ/GPTQ 4-bit quantized model.
+      Model: hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4
+
+  [4] ml.p4d.24xlarge:max
+      GPUs: 8x A100  |  VRAM: 320 GB  |  TP: 8-way
+      Context: 65536 tokens  |  Batch: 16
+      Dtype: fp16  |  GPU Mem: 0.95
+      Cost: ~$25.25/hr
+      Max context. 70B FP16 uses ~140GB, leaves ~180GB for KV cache.
+
+  [0] Cancel
+```
+
+To skip the interactive selector in scripted deployments, use `--instance-type`:
+
+```bash
+python deployment/deploy_llama3_70b.py --instance-type ml.p4d.24xlarge
+python deployment/deploy_llama3_70b.py --instance-type "ml.p4d.24xlarge:max"
+```
+
+**Choosing an instance type:**
+- **g5.48xlarge (default)**: Best balance of cost and performance for FP16 inference. 192GB total VRAM across 8 GPUs, but each A10G only has 24GB — the 70B model shard uses ~16.5GB per GPU, leaving ~5.5GB per GPU for KV cache. Context window is limited to 16K tokens by default.
+- **p4d.24xlarge**: Use when you need higher throughput or lower per-token latency. 320GB VRAM allows larger batch sizes and 32K context. Only ~$5/hr more than g5.48xlarge.
+- **g5.12xlarge**: Budget option requiring 4-bit quantization (AWQ or GPTQ). 96GB VRAM fits the quantized model (~35GB) with ample KV cache room. The deployment script auto-selects the quantized model ID for this profile.
+- **p4d.24xlarge:max**: Same hardware as p4d.24xlarge but tuned for maximum context (65K tokens) and throughput (batch 16, GPU mem 0.95). The 70B FP16 model uses ~140GB, leaving ~180GB for KV cache across 8 A100s.
+
+| Instance Type | GPUs | Total VRAM | TP Degree | Est. Cost/hr | Deploy Time (S3) | Notes |
+|---------------|------|------------|-----------|--------------|------------------|-------|
+| `ml.g5.48xlarge` | 8x A10G | 192 GB | 8 | ~$20.36 | ~10-15 min | **Default** — FP16, no quantization needed |
+| `ml.p4d.24xlarge` | 8x A100 | 320 GB | 8 | ~$25.25 | ~15-25 min | Higher throughput, lower latency, 32K context |
+| `ml.g5.12xlarge` | 4x A10G | 96 GB | 4 | ~$7.09 | ~10-15 min | Requires AWQ/GPTQ 4-bit quantization |
+| `ml.p4d.24xlarge:max` | 8x A100 | 320 GB | 8 | ~$25.25 | ~15-25 min | Max context (65K), batch 16, GPU mem 0.95 |
+
+### 70B Quick Start
+
+**Default deployment (interactive instance selector):**
+
+```bash
+export HF_TOKEN="your_token_here"
+python deployment/deploy_llama3_70b.py
+```
+
+**Faster deployment with S3 pre-downloaded weights:**
+
+```bash
+# Step 1: Pre-download model to S3 (one-time, ~140GB)
+python deployment/download_model_to_s3.py
+
+# Step 2: Deploy from S3 (significantly faster)
+python deployment/deploy_llama3_70b.py \
+  --model-s3-uri s3://my-bucket/Meta-Llama-3.1-70B-Instruct/
+```
+
+**Quantized model deployment (g5.12xlarge — budget option):**
+
+```bash
+# Step 1: Download the AWQ-INT4 quantized model to S3
+python deployment/download_model_to_s3.py \
+  --model-id hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4
+
+# Step 2: Deploy on g5.12xlarge with the quantized weights
+python deployment/deploy_llama3_70b.py \
+  --instance-type ml.g5.12xlarge \
+  --model-s3-uri s3://my-bucket/Meta-Llama-3.1-70B-Instruct-AWQ-INT4/
+```
+
+> **⚠️ S3 Prefix Collision Warning**: The download script auto-derives the S3 prefix from the model ID, so FP16 and quantized models get separate prefixes. If you previously used `--s3-prefix llama-70b-instruct/` for both, they would overwrite each other.
+
+> **⚠️ FP16 + g5.12xlarge Mismatch**: If you select `ml.g5.12xlarge` and provide `--model-s3-uri` pointing to FP16 weights (~140GB), the deployment will fail because FP16 weights don't fit in 96GB VRAM. Either use the quantized model or pick a larger instance.
+
+### 70B Default Configuration
+
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `HF_MODEL_ID` | `meta-llama/Meta-Llama-3.1-70B-Instruct` | Model to load (or S3 URI when using pre-download) |
+| `OPTION_ROLLING_BATCH` | `vllm` | vLLM backend for PagedAttention-based memory management |
+| `OPTION_ENABLE_AUTO_TOOL_CHOICE` | `true` | Enable automatic tool calling for agent workflows |
+| `OPTION_TOOL_CALL_PARSER` | `llama3_json` | Llama 3 JSON parser for structured tool call extraction |
+| `OPTION_MAX_ROLLING_BATCH_SIZE` | `4` | Max concurrent requests (lower than 8B's 32 due to memory) |
+| `OPTION_MAX_MODEL_LEN` | `16384` | Max sequence length — 16K tokens (use p4d.24xlarge for 32K+) |
+| `OPTION_DTYPE` | `fp16` | Full FP16 precision for best quality |
+| `OPTION_GPU_MEMORY_UTILIZATION` | `0.95` | Allocate 95% of GPU VRAM to vLLM, maximizes KV cache room |
+| `TENSOR_PARALLEL_DEGREE` | `8` | Distribute model across all 8 GPUs |
+
+**Additional tunable parameters (not set by default):**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPTION_ENABLE_CHUNKED_PREFILL` | not set | Set to `"true"` to overlap prefill and decode phases for better throughput |
+| `OPTION_SPECULATIVE_DECODING` | not set | Enable speculative decoding with a draft model (experimental) |
+
+### S3 Model Pre-Download
+
+Pre-downloading the 70B model weights to S3 avoids repeated ~140GB downloads from HuggingFace during development and testing, and significantly speeds up SageMaker endpoint creation.
+
+> **⚠️ Disk Space Requirement**: The script downloads the model to a local temp directory before uploading to S3. You need at least **~150GB of free disk space** for FP16 or **~40GB** for quantized models. The temp files are automatically cleaned up after the upload completes. Check available space with `df -h .` before running.
+
+```bash
+# FP16 model (default) — stored at s3://bucket/Meta-Llama-3.1-70B-Instruct/
+python deployment/download_model_to_s3.py
+
+# Quantized AWQ-INT4 model — stored at s3://bucket/Meta-Llama-3.1-70B-Instruct-AWQ-INT4/
+python deployment/download_model_to_s3.py \
+  --model-id hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4
+
+# Specify a custom bucket (prefix still auto-derived):
+python deployment/download_model_to_s3.py --s3-bucket my-model-bucket
+```
+
+**S3 prefix auto-derivation examples:**
+
+| `--model-id` | Auto-derived `--s3-prefix` |
+|---|---|
+| `meta-llama/Meta-Llama-3.1-70B-Instruct` | `Meta-Llama-3.1-70B-Instruct/` |
+| `hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4` | `Meta-Llama-3.1-70B-Instruct-AWQ-INT4/` |
+| `meta-llama/Llama-3.3-70B-Instruct` | `Llama-3.3-70B-Instruct/` |
+
+The script will:
+1. Validate S3 bucket access
+2. Check if model already exists at the derived prefix (skip if found, use `--force` to re-upload)
+3. Download model artifacts from HuggingFace Hub to a local temp directory
+4. Upload all files to S3 with multipart upload (100MB chunks, 10 concurrent threads)
+5. Display progress with estimated time remaining
+6. Print the S3 URI for use with the deployment script
+
+---
 
 ## IAM Role Setup
 
-The deployment script automatically handles IAM role creation. If you need to create it manually:
+The deployment scripts automatically handle IAM role creation. If you need to create it manually:
 
 **Option A: Using AWS Console**
 
@@ -273,96 +424,7 @@ aws iam get-role \
   --output text
 ```
 
-### Step 2: Configure Deployment
-
-The deployment script uses sensible defaults configured for the LMI container. You can modify these in `deploy_llama3_lmi.py`:
-
-```python
-# Endpoint settings
-ENDPOINT_NAME = "llama3-lmi-agent"
-INSTANCE_TYPE = "ml.g5.2xlarge"  # 1x A10G GPU (24GB)
-
-# LMI container settings
-OPTION_ROLLING_BATCH = "vllm"  # Use vLLM backend
-OPTION_ENABLE_AUTO_TOOL_CHOICE = "true"  # Enable function calling
-OPTION_TOOL_CALL_PARSER = "llama3_json"  # Llama 3 JSON parser
-```
-
-**Instance Type Selection**:
-
-| Instance Type | GPU | vCPU | Memory | Use Case | Cost/Hour |
-|---------------|-----|------|--------|----------|-----------|
-| ml.g5.2xlarge | 1 | 8 | 32 GB | Development, low traffic | ~$1.52 |
-| ml.g5.4xlarge | 1 | 16 | 64 GB | Production, medium traffic | ~$2.03 |
-| ml.g5.12xlarge | 4 | 48 | 192 GB | High traffic, low latency | ~$7.09 |
-
-### Step 3: Run Deployment Script
-
-```bash
-# Set HuggingFace token
-export HF_TOKEN="your_token_here"
-
-# Run deployment
-python deploy_llama3_lmi.py
-```
-
-The script will:
-1. Check for existing endpoint
-2. Create or use existing SageMaker execution role
-3. Create SageMaker model with LMI container
-4. Create endpoint configuration
-5. Deploy endpoint
-6. Monitor deployment progress (~5-10 minutes)
-7. Display success message with next steps
-
-### Step 4: Save Endpoint Name
-
-```bash
-# The endpoint name is shown in the deployment output
-export SAGEMAKER_ENDPOINT_NAME="llama3-lmi-agent"
-
-# Add to your shell profile for persistence
-echo 'export SAGEMAKER_ENDPOINT_NAME="llama3-lmi-agent"' >> ~/.bashrc
-```
-
-### Step 5: Test the Endpoint
-
-```python
-import boto3
-import json
-
-# Initialize SageMaker runtime client
-runtime = boto3.client('sagemaker-runtime', region_name='us-west-2')
-
-# Test prompt with LMI format
-test_payload = {
-    "inputs": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nYou are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\nSay hello!<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
-    "parameters": {
-        "max_new_tokens": 50,
-        "temperature": 0.1,
-        "do_sample": True,
-        "top_p": 0.9
-    }
-}
-
-# Invoke endpoint
-response = runtime.invoke_endpoint(
-    EndpointName='llama3-lmi-agent',
-    ContentType='application/json',
-    Accept='application/json',
-    Body=json.dumps(test_payload)
-)
-
-# Parse response from LMI container
-result = json.loads(response['Body'].read().decode('utf-8'))
-print(result['generated_text'])
-```
-
-## IAM Role Setup
-
 ### Minimum Required Permissions
-
-Create a custom policy with minimum required permissions:
 
 ```json
 {
@@ -421,9 +483,9 @@ Create a custom policy with minimum required permissions:
 }
 ```
 
-### Trust Relationship
+### S3 Permissions (70B only)
 
-Ensure your role has this trust relationship:
+If using S3 model pre-download, the user running the download script needs:
 
 ```json
 {
@@ -431,18 +493,31 @@ Ensure your role has this trust relationship:
   "Statement": [
     {
       "Effect": "Allow",
-      "Principal": {
-        "Service": "sagemaker.amazonaws.com"
-      },
-      "Action": "sts:AssumeRole"
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket"],
+      "Resource": [
+        "arn:aws:s3:::my-model-bucket",
+        "arn:aws:s3:::my-model-bucket/*"
+      ]
     }
   ]
 }
 ```
 
-## Configuration
+The SageMaker execution role also needs read access to the S3 model artifacts:
 
-### Deployment Parameters
+```json
+{
+  "Effect": "Allow",
+  "Action": ["s3:GetObject"],
+  "Resource": "arn:aws:s3:::my-model-bucket/*"
+}
+```
+
+---
+
+## Configuration Reference
+
+### Inference Parameters
 
 | Parameter | Description | Default | Range |
 |-----------|-------------|---------|-------|
@@ -454,9 +529,7 @@ Ensure your role has this trust relationship:
 
 **Note**: The LMI container uses different parameter names than TGI. Use `do_sample=true` instead of `return_full_text=false`.
 
-### Container Environment Variables
-
-The deployment script configures these environment variables in the LMI container:
+### Container Environment Variables (8B)
 
 | Variable | Value | Purpose |
 |----------|-------|---------|
@@ -469,6 +542,10 @@ The deployment script configures these environment variables in the LMI containe
 | `OPTION_DTYPE` | `fp16` | Use FP16 precision for faster inference |
 | `TENSOR_PARALLEL_DEGREE` | `1` | Number of GPUs for tensor parallelism |
 
+### Container Environment Variables (70B)
+
+See [70B Default Configuration](#70b-default-configuration) above.
+
 ### Timeout Configuration
 
 | Timeout | Default | Purpose |
@@ -477,11 +554,13 @@ The deployment script configures these environment variables in the LMI containe
 | `container_startup_health_check_timeout` | 600s | Time for health checks |
 | `deployment_timeout` | 1800s | Total deployment timeout |
 
+---
+
 ## Validation
 
 ### Automatic Validation
 
-The deployment script automatically validates the endpoint by:
+Both deployment scripts automatically validate the endpoint by:
 
 1. **Connectivity Test**: Verifies endpoint is reachable
 2. **Response Structure Test**: Checks response format
@@ -495,10 +574,8 @@ Test the endpoint manually:
 import boto3
 import json
 
-# Initialize SageMaker runtime client
 runtime = boto3.client('sagemaker-runtime', region_name='us-west-2')
 
-# Test prompt with LMI format
 test_payload = {
     "inputs": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nYou are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\nSay hello!<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
     "parameters": {
@@ -509,23 +586,19 @@ test_payload = {
     }
 }
 
-# Invoke endpoint
 response = runtime.invoke_endpoint(
-    EndpointName='your-endpoint-name',
+    EndpointName='your-endpoint-name',  # llama3-lmi-agent or llama3-70b-lmi-agent
     ContentType='application/json',
     Accept='application/json',
     Body=json.dumps(test_payload)
 )
 
-# Parse response from LMI container
 result = json.loads(response['Body'].read().decode('utf-8'))
 print("✓ Endpoint is functional")
 print(f"Response: {result['generated_text']}")
 ```
 
 ### Health Check
-
-Check endpoint status:
 
 ```bash
 aws sagemaker describe-endpoint \
@@ -536,6 +609,8 @@ aws sagemaker describe-endpoint \
 ```
 
 Expected output: `InService`
+
+---
 
 ## Monitoring
 
@@ -558,15 +633,8 @@ Monitor these key metrics in CloudWatch:
 
 ### CloudWatch Logs
 
-View endpoint logs:
-
 ```bash
-# List log streams
-aws logs describe-log-streams \
-  --log-group-name /aws/sagemaker/Endpoints/your-endpoint-name \
-  --region us-west-2
-
-# View logs
+# View logs (replace with your endpoint name)
 aws logs tail /aws/sagemaker/Endpoints/your-endpoint-name \
   --follow \
   --region us-west-2
@@ -574,10 +642,7 @@ aws logs tail /aws/sagemaker/Endpoints/your-endpoint-name \
 
 ### Set Up Alarms
 
-Create CloudWatch alarms for monitoring:
-
 ```bash
-# Alarm for high error rate
 aws cloudwatch put-metric-alarm \
   --alarm-name sagemaker-endpoint-errors \
   --alarm-description "Alert on endpoint errors" \
@@ -592,11 +657,13 @@ aws cloudwatch put-metric-alarm \
   --region us-west-2
 ```
 
+---
+
 ## Cleanup
 
-### Delete Endpoint
+When you're done, delete the endpoint to stop incurring charges.
 
-When you're done, delete the endpoint to stop incurring charges:
+> **⚠️ Important**: The 70B endpoint costs ~$20.36/hour. Always delete when not in use during development.
 
 **Option A: Using AWS Console**
 
@@ -608,545 +675,196 @@ When you're done, delete the endpoint to stop incurring charges:
 **Option B: Using AWS CLI**
 
 ```bash
-# Delete endpoint
-aws sagemaker delete-endpoint \
-  --endpoint-name "llama3-lmi-agent" \
-  --region us-west-2
+# Delete 8B endpoint
+aws sagemaker delete-endpoint --endpoint-name llama3-lmi-agent --region us-west-2
 
-# Delete endpoint configuration
-aws sagemaker delete-endpoint-config \
-  --endpoint-config-name your-endpoint-config-name \
-  --region us-west-2
-
-# Delete model
-aws sagemaker delete-model \
-  --model-name your-model-name \
-  --region us-west-2
-```
-
-### Verify Deletion
-
-```bash
-aws sagemaker describe-endpoint \
-  --endpoint-name your-endpoint-name \
-  --region us-west-2
-```
-
-Expected: `ResourceNotFound` error
-
-## Troubleshooting
-
-### Issue: Deployment Fails with ResourceLimitExceeded
-
-**Error Message**:
-```
-ResourceLimitExceeded: The account-level service limit 'ml.g5.2xlarge for endpoint usage' is 0 Instances
-```
-
-**Solution**:
-1. Request quota increase (see Prerequisites section)
-2. Or try a different instance type
-3. Or deploy in a different region
-
-### Issue: Endpoint Stuck in Creating Status
-
-**Symptoms**:
-- Endpoint status remains "Creating" for > 15 minutes
-- No error messages in logs
-
-**Solutions**:
-1. Check CloudWatch logs for errors:
-   ```bash
-   aws logs tail /aws/sagemaker/Endpoints/your-endpoint-name --follow
-   ```
-
-2. Verify the model ID is correct and accessible
-
-3. Check if the container image is available in your region
-
-4. Increase timeout and retry:
-   ```python
-   wait_for_endpoint(endpoint_name, timeout=3600)  # 1 hour
-   ```
-
-### Issue: Validation Fails
-
-**Error Message**:
-```
-Validation failed: Endpoint invocation failed: ModelError
-```
-
-**Solutions**:
-1. Check endpoint logs for model loading errors
-2. Verify instance type has enough memory for the model
-3. Check if model requires authentication (HuggingFace token)
-4. Try with a smaller model first to isolate the issue
-
-### Issue: IAM Permission Denied
-
-**Error Message**:
-```
-AccessDeniedException: User: arn:aws:iam::123456789:user/myuser is not authorized to perform: sagemaker:CreateEndpoint
-```
-
-**Solutions**:
-1. Verify IAM role has required permissions
-2. Check trust relationship allows SageMaker service
-3. Ensure you're using the correct role ARN
-4. Wait a few minutes for IAM changes to propagate
-
-### Issue: High Latency
-
-**Symptoms**:
-- Response times > 5 seconds
-- ModelLatency metric is high
-
-**Solutions**:
-1. Use a larger instance type with more GPUs
-2. Reduce `max_new_tokens` to generate shorter responses
-3. Enable auto-scaling for load distribution
-4. Consider using multiple endpoints with load balancing
-
-### Issue: Out of Memory Errors
-
-**Error Message**:
-```
-RuntimeError: CUDA out of memory
-```
-
-**Solutions**:
-1. Use a larger instance type (more GPU memory)
-2. Reduce `MAX_INPUT_LENGTH` in container config
-3. Reduce `max_new_tokens` in inference parameters
-4. Use a smaller model variant
-
-## Cost Estimation
-
-### Hourly Costs
-
-| Instance Type | Cost/Hour (us-west-2) |
-|---------------|----------------------|
-| ml.g5.2xlarge | $1.52 |
-| ml.g5.4xlarge | $2.03 |
-| ml.g5.12xlarge | $7.09 |
-
-### Monthly Cost Examples
-
-**Development (8 hours/day, 20 days/month)**:
-- Instance: ml.g5.2xlarge
-- Hours: 160/month
-- Cost: ~$243/month
-
-**Production (24/7, single instance)**:
-- Instance: ml.g5.2xlarge
-- Hours: 720/month
-- Cost: ~$1,094/month
-
-**Production (24/7, auto-scaling 1-3 instances, avg 1.5)**:
-- Instance: ml.g5.2xlarge
-- Hours: 1,080/month
-- Cost: ~$1,642/month
-
-### Cost Optimization Tips
-
-1. **Delete endpoints when not in use** (development)
-2. **Use auto-scaling** to match demand
-3. **Set up CloudWatch alarms** for unexpected usage
-4. **Use smaller instance types** for low-traffic scenarios
-5. **Batch requests** when possible to maximize throughput
-
-## Next Steps
-
-After successful deployment:
-
-1. **Configure your application**: Set `SAGEMAKER_ENDPOINT_NAME` environment variable
-2. **Test with your tools**: Run the financial agent with SageMaker endpoint
-3. **Monitor performance**: Set up CloudWatch dashboards and alarms
-4. **Optimize costs**: Configure auto-scaling based on usage patterns
-5. **Review security**: Ensure IAM policies follow least privilege principle
-
----
-
-## Llama 70B Deployment
-
-The Llama 3.1 70B Instruct model is a production-ready alternative to the 8B model, offering significantly improved tool calling reliability, a 128K token context window, and better reasoning for complex multi-tool queries. The 70B model requires a multi-GPU instance with tensor parallelism to fit its ~140GB FP16 weights in GPU memory.
-
-The existing agent code works with the 70B endpoint without modification — switch between 8B and 70B by changing only the `SAGEMAKER_ENDPOINT_NAME` environment variable.
-
-### 70B Interactive Instance Selector
-
-The deployment script includes an interactive instance selector that displays all available profiles with their full specs. Run the script and choose from the numbered menu:
-
-```bash
-python deployment/deploy_llama3_70b.py
-```
-
-```
-========================================================================
-  SELECT INSTANCE TYPE
-========================================================================
-
-  [1] ml.g5.48xlarge ← current default
-      GPUs: 8x A10G  |  VRAM: 192 GB  |  TP: 8-way
-      Context: 16384 tokens  |  Batch: 4
-      Dtype: fp16  |  GPU Mem: 0.95
-      Cost: ~$20.36/hr
-      Default. FP16, no quantization needed.
-
-  [2] ml.p4d.24xlarge
-      GPUs: 8x A100  |  VRAM: 320 GB  |  TP: 8-way
-      Context: 32768 tokens  |  Batch: 8
-      Dtype: fp16  |  GPU Mem: 0.90
-      Cost: ~$25.25/hr
-      Higher throughput, lower latency. Supports 32K+ context.
-
-  [3] ml.g5.12xlarge
-      GPUs: 4x A10G  |  VRAM: 96 GB  |  TP: 4-way
-      Context: 8192 tokens  |  Batch: 4
-      Dtype: auto  |  GPU Mem: 0.90
-      Cost: ~$7.09/hr
-      Budget. Requires AWQ/GPTQ 4-bit quantized model.
-      Model: hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4
-
-  [4] ml.p4d.24xlarge:max
-      GPUs: 8x A100  |  VRAM: 320 GB  |  TP: 8-way
-      Context: 65536 tokens  |  Batch: 16
-      Dtype: fp16  |  GPU Mem: 0.95
-      Cost: ~$25.25/hr
-      Max context. 70B FP16 uses ~140GB, leaves ~180GB for KV cache.
-
-  [0] Cancel
-```
-
-To skip the interactive selector in scripted deployments, use `--instance-type`:
-
-```bash
-python deployment/deploy_llama3_70b.py --instance-type ml.p4d.24xlarge
-python deployment/deploy_llama3_70b.py --instance-type "ml.p4d.24xlarge:max"
-```
-
-### 70B Instance Type Comparison
-
-| Instance Type | GPUs | Total VRAM | TP Degree | Est. Cost/hr | Deploy Time (S3) | Notes |
-|---------------|------|------------|-----------|--------------|------------------|-------|
-| `ml.g5.48xlarge` | 8x A10G | 192 GB | 8 | ~$20.36 | ~10-15 min | **Default** — FP16, no quantization needed |
-| `ml.p4d.24xlarge` | 8x A100 | 320 GB | 8 | ~$25.25 | ~15-25 min | Higher throughput, lower latency, 32K context |
-| `ml.g5.12xlarge` | 4x A10G | 96 GB | 4 | ~$7.09 | ~10-15 min | Requires AWQ/GPTQ 4-bit quantization |
-| `ml.p4d.24xlarge:max` | 8x A100 | 320 GB | 8 | ~$25.25 | ~15-25 min | Max context (65K), batch 16, GPU mem 0.95 |
-
-**Choosing an instance type:**
-- **g5.48xlarge (default)**: Best balance of cost and performance for FP16 inference. 192GB total VRAM across 8 GPUs, but each A10G only has 24GB — the 70B model shard uses ~16.5GB per GPU, leaving ~5.5GB per GPU for KV cache. Context window is limited to 16K tokens by default.
-- **p4d.24xlarge**: Use when you need higher throughput or lower per-token latency. 320GB VRAM allows larger batch sizes and 32K context. Only ~$5/hr more than g5.48xlarge.
-- **g5.12xlarge**: Budget option requiring 4-bit quantization (AWQ or GPTQ). 96GB VRAM fits the quantized model (~35GB) with ample KV cache room. The deployment script auto-selects the quantized model ID for this profile.
-- **p4d.24xlarge:max**: Same hardware as p4d.24xlarge but tuned for maximum context (65K tokens) and throughput (batch 16, GPU mem 0.95). The 70B FP16 model uses ~140GB, leaving ~180GB for KV cache across 8 A100s.
-
-### 70B Quick Start
-
-**Default deployment (interactive instance selector):**
-
-```bash
-# Set HuggingFace token
-export HF_TOKEN="your_token_here"
-
-# Deploy 70B model — the interactive selector will prompt for instance type
-python deployment/deploy_llama3_70b.py
-```
-
-**Faster deployment with S3 pre-downloaded weights:**
-
-```bash
-# Step 1: Pre-download model to S3 (one-time, ~140GB)
-# The S3 prefix is auto-derived from the model ID:
-#   meta-llama/Meta-Llama-3.1-70B-Instruct → Meta-Llama-3.1-70B-Instruct/
-python deployment/download_model_to_s3.py
-
-# Step 2: Deploy from S3 (significantly faster)
-python deployment/deploy_llama3_70b.py \
-  --model-s3-uri s3://my-bucket/Meta-Llama-3.1-70B-Instruct/
-```
-
-**Quantized model deployment (g5.12xlarge — budget option):**
-
-```bash
-# Step 1: Download the AWQ-INT4 quantized model to S3
-# Auto-derives a SEPARATE S3 prefix: Meta-Llama-3.1-70B-Instruct-AWQ-INT4/
-python deployment/download_model_to_s3.py \
-  --model-id hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4
-
-# Step 2: Deploy on g5.12xlarge with the quantized weights
-python deployment/deploy_llama3_70b.py \
-  --instance-type ml.g5.12xlarge \
-  --model-s3-uri s3://my-bucket/Meta-Llama-3.1-70B-Instruct-AWQ-INT4/
-```
-
-> **⚠️ S3 Prefix Collision Warning**: The download script auto-derives the S3 prefix from the model ID, so FP16 and quantized models get separate prefixes. If you previously used `--s3-prefix llama-70b-instruct/` for both FP16 and quantized models, they would overwrite each other. The default behavior avoids this by using the model name as the prefix (e.g., `Meta-Llama-3.1-70B-Instruct/` vs `Meta-Llama-3.1-70B-Instruct-AWQ-INT4/`).
-
-> **⚠️ FP16 + g5.12xlarge Mismatch**: If you select the `ml.g5.12xlarge` profile and provide `--model-s3-uri` pointing to FP16 weights (~140GB), the deployment will fail because FP16 weights don't fit in 96GB VRAM. The script warns about this and prompts for confirmation. Either use the quantized model or pick a larger instance.
-
-The deployment script will:
-1. Show the interactive instance selector (or use `--instance-type` if provided)
-2. Apply the selected profile (TP degree, context length, batch size, dtype, model ID)
-3. Verify your instance quota
-4. Display estimated hourly cost and prompt for confirmation
-5. Create or use existing SageMaker execution role
-6. Create SageMaker model with LMI container and selected configuration
-7. Create endpoint configuration and deploy
-8. Monitor deployment progress (~10-15 minutes for 70B)
-9. Display endpoint name and cleanup instructions
-
-### 70B Configuration
-
-The 70B deployment uses these LMI container environment variables:
-
-| Variable | Value | Purpose |
-|----------|-------|---------|
-| `HF_MODEL_ID` | `meta-llama/Meta-Llama-3.1-70B-Instruct` | Model to load (or S3 URI when using pre-download) |
-| `OPTION_ROLLING_BATCH` | `vllm` | vLLM backend for PagedAttention-based memory management |
-| `OPTION_ENABLE_AUTO_TOOL_CHOICE` | `true` | Enable automatic tool calling for agent workflows |
-| `OPTION_TOOL_CALL_PARSER` | `llama3_json` | Llama 3 JSON parser for structured tool call extraction |
-| `OPTION_MAX_ROLLING_BATCH_SIZE` | `4` | Max concurrent requests (lower than 8B's 32 due to memory) |
-| `OPTION_MAX_MODEL_LEN` | `16384` | Max sequence length — 16K tokens (fits A10G KV cache at GPU_MEMORY_UTILIZATION=0.95; use p4d.24xlarge for 32K+) |
-| `OPTION_DTYPE` | `fp16` | Full FP16 precision for best quality |
-| `OPTION_GPU_MEMORY_UTILIZATION` | `0.95` | Allocate 95% of GPU VRAM to vLLM (default 0.90), maximizes KV cache room |
-| `TENSOR_PARALLEL_DEGREE` | `8` | Distribute model across all 8 GPUs |
-
-**Additional tunable parameters (not set by default):**
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OPTION_ENABLE_CHUNKED_PREFILL` | not set | Set to `"true"` to overlap prefill and decode phases for better throughput |
-| `OPTION_SPECULATIVE_DECODING` | not set | Enable speculative decoding with a draft model (experimental) |
-
-### S3 Model Pre-Download
-
-Pre-downloading the 70B model weights to S3 avoids repeated ~140GB downloads from HuggingFace during development and testing, and significantly speeds up SageMaker endpoint creation.
-
-The download script auto-derives the S3 prefix from the model ID, so different model variants (FP16 vs quantized) are stored at separate S3 paths and don't collide.
-
-> **⚠️ Disk Space Requirement**: The script downloads the model to a local temp directory before uploading to S3. You need at least **~150GB of free disk space** for FP16 or **~40GB** for quantized models. The temp files are automatically cleaned up after the upload completes. Check available space with `df -h .` before running.
-
-**Workflow:**
-
-```bash
-# FP16 model (default) — stored at s3://bucket/Meta-Llama-3.1-70B-Instruct/
-python deployment/download_model_to_s3.py
-
-# Quantized AWQ-INT4 model — stored at s3://bucket/Meta-Llama-3.1-70B-Instruct-AWQ-INT4/
-python deployment/download_model_to_s3.py \
-  --model-id hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4
-
-# Specify a custom bucket (prefix still auto-derived):
-python deployment/download_model_to_s3.py --s3-bucket my-model-bucket
-
-# Override the S3 prefix manually (not recommended):
-python deployment/download_model_to_s3.py --s3-prefix my-custom-prefix/
-```
-
-**S3 prefix auto-derivation examples:**
-
-| `--model-id` | Auto-derived `--s3-prefix` |
-|---|---|
-| `meta-llama/Meta-Llama-3.1-70B-Instruct` | `Meta-Llama-3.1-70B-Instruct/` |
-| `hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4` | `Meta-Llama-3.1-70B-Instruct-AWQ-INT4/` |
-| `meta-llama/Llama-3.3-70B-Instruct` | `Llama-3.3-70B-Instruct/` |
-
-The script will:
-1. Validate S3 bucket access
-2. Check if model already exists at the derived prefix (skip if found, use `--force` to re-upload)
-3. Download model artifacts from HuggingFace Hub to a local temp directory
-4. Upload all files to S3 with multipart upload (100MB chunks, 10 concurrent threads)
-5. Display progress with estimated time remaining
-6. Print the S3 URI for use with the deployment script
-
-**IAM Permissions for S3 Bucket (your AWS user/role running the download script):**
-
-The user or role executing `download_model_to_s3.py` needs write access to the target S3 bucket:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:PutObject",
-        "s3:GetObject",
-        "s3:ListBucket"
-      ],
-      "Resource": [
-        "arn:aws:s3:::my-model-bucket",
-        "arn:aws:s3:::my-model-bucket/llama-70b-instruct/*"
-      ]
-    }
-  ]
-}
-```
-
-**IAM Permissions for SageMaker Execution Role (to read model from S3 at deploy time):**
-
-The SageMaker execution role needs read access to the S3 model artifacts:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:GetObject"
-      ],
-      "Resource": "arn:aws:s3:::my-model-bucket/llama-70b-instruct/*"
-    }
-  ]
-}
-```
-
-### 70B Cost Estimates
-
-**Hourly Costs (us-west-2 on-demand pricing):**
-
-| Instance Type | Cost/Hour |
-|---------------|-----------|
-| `ml.g5.48xlarge` | ~$20.36 |
-| `ml.p4d.24xlarge` | ~$25.25 |
-| `ml.g5.12xlarge` | ~$7.09 |
-
-**Monthly Cost Examples (ml.g5.48xlarge):**
-
-| Usage Pattern | Hours/Month | Est. Monthly Cost |
-|---------------|-------------|-------------------|
-| Development (8 hrs/day, 20 days) | 160 | ~$3,258 |
-| Production (24/7) | 720 | ~$14,659 |
-
-> **⚠️ Cost Warning**: The 70B deployment on `ml.g5.48xlarge` costs ~$20.36/hour — roughly **13x more** than the 8B deployment on `ml.g5.2xlarge` (~$1.52/hour). Always delete the endpoint when not in use during development.
-
-**Cleanup commands:**
-
-```bash
+# Delete 70B endpoint
 aws sagemaker delete-endpoint --endpoint-name llama3-70b-lmi-agent --region us-west-2
+
+# Also clean up endpoint configuration and model
+aws sagemaker delete-endpoint-config --endpoint-config-name your-config-name --region us-west-2
+aws sagemaker delete-model --model-name your-model-name --region us-west-2
 ```
 
-Or use the project cleanup script:
+**Option C: Using the cleanup script**
 
 ```bash
 python cleanup_project.py
 ```
 
-### 70B Troubleshooting
+### Verify Deletion
 
-#### Quota Errors
+```bash
+aws sagemaker describe-endpoint --endpoint-name your-endpoint-name --region us-west-2
+```
+
+Expected: `ResourceNotFound` error
+
+---
+
+## Troubleshooting
+
+### ResourceLimitExceeded (Quota)
 
 **Error:**
 ```
-ResourceLimitExceeded: The account-level service limit 'ml.g5.48xlarge for endpoint usage' is 0 Instances
+ResourceLimitExceeded: The account-level service limit 'ml.g5.Xxlarge for endpoint usage' is 0 Instances
 ```
 
 **Solution:**
-1. Go to **Service Quotas → Amazon SageMaker** in the AWS Console
-2. Search for `ml.g5.48xlarge for endpoint usage`
-3. Request a quota increase to at least 1 instance
-4. Quota increases for GPU instances may take 1-3 business days to approve
+1. Request quota increase (see [Prerequisites](#3-check-service-quotas))
+2. Try a different instance type
+3. Deploy in a different region
+4. For 70B, quota increases for GPU instances may take 1-3 business days
 
-```bash
-# Check your current quota for g5.48xlarge
-aws service-quotas list-service-quotas \
-  --service-code sagemaker \
-  --region us-west-2 \
-  --query "Quotas[?contains(QuotaName, 'g5.48xlarge') && contains(QuotaName, 'endpoint')].{Name:QuotaName,Value:Value,Code:QuotaCode}" \
-  --output table
+### Endpoint Stuck in Creating Status
+
+**Symptoms:** Endpoint status remains "Creating" for > 15 minutes (8B) or > 30 minutes (70B)
+
+**Solutions:**
+1. Check CloudWatch logs:
+   ```bash
+   aws logs tail /aws/sagemaker/Endpoints/your-endpoint-name --follow
+   ```
+2. Verify the model ID is correct and accessible
+3. Check if the container image is available in your region
+4. Increase timeout and retry
+
+**70B-specific:** The 70B endpoint takes 10-15 minutes on G5 instances and 15-25 minutes on p4d.24xlarge. This is normal.
+
+**Why p4d.24xlarge takes longer:**
+
+| Factor | Details |
+|--------|---------|
+| Instance provisioning | A100 GPUs are less common, AWS takes longer to allocate |
+| GPU initialization | 8x A100s have complex memory hierarchies (HBM2e) and NVLink interconnects |
+| Model sharding | vLLM must shard ~140GB across 8 GPUs and configure NCCL communication rings |
+| Health check warmup | First inference pass on A100s with large context/batch configs takes longer |
+
+### Validation Fails / ModelError
+
+**Solutions:**
+1. Check endpoint logs for model loading errors
+2. Verify instance type has enough memory for the model
+3. Check if model requires authentication (HuggingFace token)
+4. Try with a smaller model first to isolate the issue
+
+### IAM Permission Denied
+
+**Solutions:**
+1. Verify IAM role has required permissions (see [IAM Role Setup](#iam-role-setup))
+2. Check trust relationship allows SageMaker service
+3. Ensure you're using the correct role ARN
+4. Wait a few minutes for IAM changes to propagate
+
+### High Latency
+
+**Solutions:**
+1. Use a larger instance type with more GPUs
+2. Reduce `max_new_tokens` to generate shorter responses
+3. Enable auto-scaling for load distribution
+4. Consider using multiple endpoints with load balancing
+
+### Out of Memory (CUDA OOM)
+
+**Error:**
+```
+RuntimeError: CUDA out of memory
 ```
 
-#### Memory Requirements
+**8B Solutions:**
+1. Use a larger instance type (more GPU memory)
+2. Reduce `OPTION_MAX_MODEL_LEN`
+3. Reduce `max_new_tokens` in inference parameters
+
+**70B Solutions:**
+1. The default `OPTION_MAX_MODEL_LEN` is `16384` — do not increase beyond this on g5.48xlarge
+2. Reduce `OPTION_MAX_ROLLING_BATCH_SIZE` (e.g., from `4` to `2`)
+3. `OPTION_GPU_MEMORY_UTILIZATION` is `0.95` by default — do not lower it on g5.48xlarge
+4. Upgrade to `ml.p4d.24xlarge` (320 GB VRAM) for longer context windows (32K+)
+5. Use a quantized model variant on `ml.g5.12xlarge` with `OPTION_DTYPE="auto"`
+
+**70B KV Cache Error:**
+```
+ValueError: The model's max seq len (32768) is larger than the maximum number of tokens that can be stored in KV cache
+```
+
+On `ml.g5.48xlarge`, each A10G GPU has 24GB VRAM. The 70B FP16 model shard uses ~16.5GB per GPU, leaving only ~5.5GB for KV cache. Reduce `OPTION_MAX_MODEL_LEN` to `16384` or `8192`.
+
+### Instance Capacity Errors (70B)
+
+**Error:**
+```
+Unable to provision requested ML compute capacity due to InsufficientInstanceCapacity error.
+```
+
+This means AWS didn't have the requested GPU instance available in your region. Common with `ml.p4d.24xlarge` (A100 GPUs).
+
+**Solutions:**
+1. Clean up the failed endpoint and retry later (capacity fluctuates, try off-peak hours)
+2. Fall back to `ml.g5.48xlarge` (more abundant)
+3. Use `ml.g5.12xlarge` with AWQ quantization as a budget fallback
+
+### 70B Memory Requirements
 
 The 70B model in FP16 requires approximately:
 - **~140 GB** for model weights
 - **~20-50 GB** additional for KV cache (depends on `OPTION_MAX_MODEL_LEN` and batch size)
 - **Total: ~160-192 GB** GPU VRAM
 
-This is why `ml.g5.48xlarge` (192 GB across 8x A10G GPUs) is the minimum recommended instance for FP16 inference. If you see memory-related failures, do not attempt to use a smaller instance without quantization.
+This is why `ml.g5.48xlarge` (192 GB across 8x A10G GPUs) is the minimum recommended instance for FP16 inference.
 
-#### Instance Capacity Errors
+---
 
-**Error:**
-```
-Unable to provision requested ML compute capacity due to InsufficientInstanceCapacity error.
-Please retry using a different ML instance type or after some time.
-```
+## Cost Estimation
 
-This means AWS did not have the requested GPU instance available in your region at that moment. This is especially common with `ml.p4d.24xlarge` (A100 GPUs) which are in high demand and limited supply. G5 instances (A10G) are generally more available.
+### Hourly Costs (us-west-2)
 
-**What to do:**
-1. Clean up the failed endpoint (the deploy script will offer to do this automatically on the next run):
-   ```bash
-   aws sagemaker delete-endpoint --endpoint-name llama3-70b-lmi-agent --region us-west-2
-   ```
-2. Retry later — capacity fluctuates, especially during off-peak hours (late evening / early morning Pacific time)
-3. Fall back to a different instance type:
-   - `ml.g5.48xlarge` — more abundant, 16K context, FP16
-   - `ml.g5.12xlarge` — budget option with AWQ quantization, 8K context
+| Instance Type | Model | Cost/Hour |
+|---------------|-------|-----------|
+| ml.g5.2xlarge | 8B | ~$1.52 |
+| ml.g5.4xlarge | 8B | ~$2.03 |
+| ml.g5.12xlarge | 8B or 70B (quantized) | ~$7.09 |
+| ml.g5.48xlarge | 70B (FP16) | ~$20.36 |
+| ml.p4d.24xlarge | 70B (FP16) | ~$25.25 |
 
-> **Note**: This is an AWS infrastructure limitation, not a problem with your configuration. GPU instances are a shared resource and availability varies by region and time of day.
+### Monthly Cost Examples
 
-#### Deployment Time
+**8B — Development (8 hrs/day, 20 days/month, ml.g5.2xlarge):**
+- Hours: 160/month → ~$243/month
 
-The 70B endpoint takes **10-15 minutes** to become `InService` on G5 instances, compared to ~5-10 minutes for the 8B model. On `ml.p4d.24xlarge`, expect **15-25 minutes** even when loading from S3.
+**8B — Production (24/7, ml.g5.2xlarge):**
+- Hours: 720/month → ~$1,094/month
 
-**Why p4d.24xlarge takes longer than G5 instances:**
+**70B — Development (8 hrs/day, 20 days/month, ml.g5.48xlarge):**
+- Hours: 160/month → ~$3,258/month
 
-| Factor | Details |
-|--------|---------|
-| Instance provisioning | A100 GPU instances are less common in the fleet than A10G instances, so AWS takes longer to allocate one |
-| GPU initialization | 8x A100s have more complex memory hierarchies (HBM2e) and NVLink interconnects that require additional setup |
-| Model sharding | vLLM must shard ~140GB across 8 GPUs, configure NCCL communication rings, and pre-allocate KV cache — larger configs (`:max` profile with 65K context, batch 16) increase this overhead |
-| Health check warmup | The first inference pass on A100s with large context/batch configs takes longer to complete |
+**70B — Production (24/7, ml.g5.48xlarge):**
+- Hours: 720/month → ~$14,659/month
 
-The S3 model loading itself is fast (~2-3 minutes). The extra time is all hardware provisioning and initialization.
+> **⚠️ Cost Warning**: The 70B deployment on `ml.g5.48xlarge` costs roughly **13x more** than the 8B on `ml.g5.2xlarge`. Always delete the endpoint when not in use during development.
 
-Using `--model-s3-uri` with pre-downloaded weights still helps significantly — it eliminates the ~140GB HuggingFace download, which can add 10+ minutes on top of the provisioning time.
+### Cost Optimization Tips
 
-If the endpoint stays in `Creating` status for more than 30 minutes, check CloudWatch logs:
+1. **Delete endpoints when not in use** (especially 70B during development)
+2. **Use auto-scaling** to match demand
+3. **Set up CloudWatch alarms** for unexpected usage
+4. **Use the 8B model** for development and testing, 70B for production
+5. **Consider quantized 70B** on `ml.g5.12xlarge` (~$7.09/hr) for budget-conscious production
+6. **Batch requests** when possible to maximize throughput
 
-```bash
-aws logs tail /aws/sagemaker/Endpoints/llama3-70b-lmi-agent --follow --region us-west-2
-```
+---
 
-#### OOM (Out of Memory) / KV Cache Errors
+## Next Steps
 
-**Error:**
-```
-RuntimeError: CUDA out of memory
-```
-or
-```
-ValueError: The model's max seq len (32768) is larger than the maximum number of tokens that can be stored in KV cache
-```
+After successful deployment:
 
-**Root cause:** On `ml.g5.48xlarge`, each A10G GPU has 24GB VRAM. The 70B FP16 model shard uses ~16.5GB per GPU, leaving only ~5.5GB for KV cache. A `max_model_len` of 32768 requires far more KV cache than available.
-
-**Solutions:**
-1. The default `OPTION_MAX_MODEL_LEN` is set to `16384` to balance context capacity and memory
-2. If you increased it beyond `16384` and hit OOM, reduce it back to `16384` or `8192`
-3. Reduce `OPTION_MAX_ROLLING_BATCH_SIZE` (e.g., from `4` to `2`)
-4. `OPTION_GPU_MEMORY_UTILIZATION` is set to `0.95` by default — do not lower it on g5.48xlarge
-5. Upgrade to `ml.p4d.24xlarge` (320 GB VRAM) for longer context windows (32K+)
-6. Use a quantized model variant on `ml.g5.12xlarge` with `OPTION_DTYPE="auto"`
-
-### Switching Between 8B and 70B
-
-The agent code uses the `SAGEMAKER_ENDPOINT_NAME` environment variable to determine which endpoint to call. No code changes are needed to switch between models:
-
-```bash
-# Use the 8B model (default, lower cost)
-export SAGEMAKER_ENDPOINT_NAME="llama3-lmi-agent"
-
-# Use the 70B model (better quality, higher cost)
-export SAGEMAKER_ENDPOINT_NAME="llama3-70b-lmi-agent"
-
-# Then run the agent as usual
-python fin-agent-sagemaker-v2.py
-```
-
-Both endpoints use the same LMI container with vLLM backend and the same OpenAI-compatible chat completion API, so the content handler and agent wrapper work identically with either model.
+1. **Set endpoint variable**: `export SAGEMAKER_ENDPOINT_NAME="your-endpoint-name"`
+2. **Test with tools**: `python test_multiple_parallel_tools.py`
+3. **Run the agent**: `python fin-agent-sagemaker-v2.py`
+4. **Monitor performance**: Set up CloudWatch dashboards and alarms
+5. **Optimize costs**: Configure auto-scaling based on usage patterns
+6. **Review security**: Ensure IAM policies follow least privilege principle
 
 ## Additional Resources
 
